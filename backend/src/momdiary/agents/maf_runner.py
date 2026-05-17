@@ -1,0 +1,235 @@
+"""Adapter that runs the real MAF Agent and normalizes its output.
+
+Each request builds a fresh `Agent` with tool wrappers that close over the
+caller's `AsyncSession`. Tool wrappers call the shared `invoke_tool`
+registry so production and scripted tests share one execution path.
+"""
+
+from __future__ import annotations
+
+import inspect
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from momdiary.agents.diary_agent import build_agent
+from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.tools.registry import TOOL_REGISTRY, invoke_tool
+from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import get_default_timezone
+
+logger = get_logger(__name__)
+
+
+TOOL_DESCRIPTIONS: dict[str, str] = {
+    "log_feed": (
+        "Record a new feeding event. Use when the caregiver reports the baby "
+        "ate, drank, breastfed, or had formula/solids/water. "
+        "feed_type must be one of: breast_milk, formula, solids, water. "
+        "unit must be 'ml' or 'g'. occurred_at is ISO-8601 with timezone offset; "
+        "use the current local time when the caregiver does not specify one."
+    ),
+    "update_feed": (
+        "Modify an existing feed entry. Use only when the caregiver wants to "
+        "correct or change a previously recorded feeding. entry_id is required."
+    ),
+    "delete_feed": (
+        "Soft-delete an existing feed entry. Use when the caregiver says a "
+        "feeding was logged by mistake or should be removed."
+    ),
+    "log_sleep": (
+        "Record a sleep session with start_at and end_at (both ISO-8601 with "
+        "timezone offset). Use when the caregiver reports the baby slept, "
+        "napped, or finished a nap."
+    ),
+    "update_sleep": (
+        "Modify an existing sleep entry. Use when the caregiver corrects a "
+        "previously recorded sleep's start or end time. entry_id is required."
+    ),
+    "delete_sleep": (
+        "Soft-delete an existing sleep entry. Use when the caregiver says a "
+        "sleep record was logged by mistake or should be removed."
+    ),
+    "log_poop": (
+        "Record a diaper / bowel-movement event. occurred_at is ISO-8601 with "
+        "timezone offset. consistency is one of: watery, soft, formed, hard."
+    ),
+    "update_poop": (
+        "Modify an existing poop entry (occurred_at or consistency). "
+        "entry_id is required."
+    ),
+    "delete_poop": (
+        "Soft-delete an existing poop entry. Use when the caregiver says the "
+        "entry was logged by mistake or should be removed."
+    ),
+    "log_appointment": (
+        "Schedule a new medical or care appointment. scheduled_at is ISO-8601 "
+        "with timezone offset. Optionally include a note (<= 2000 chars)."
+    ),
+    "update_appointment": (
+        "Modify an existing appointment's scheduled time. entry_id is required."
+    ),
+    "delete_appointment": (
+        "Soft-delete an existing appointment. Use when the caregiver cancels "
+        "or removes a scheduled appointment."
+    ),
+    "add_appointment_note": (
+        "Append a new note (<= 2000 chars) to an existing appointment. "
+        "Notes are append-only; never overwrite existing notes. "
+        "appointment_id is required."
+    ),
+}
+
+
+def _build_tool_wrappers(
+    session: AsyncSession, captured: list[AgentRunResult]
+) -> list[Any]:
+    """Build per-request tool callables that bind `session` and capture results."""
+
+    wrappers: list[Any] = []
+
+    for tool_name, tool_fn in TOOL_REGISTRY.items():
+        original_sig = inspect.signature(tool_fn)
+        # Strip the `session` positional from the public signature so MAF
+        # generates a JSON schema with only the model-facing parameters.
+        public_params = [
+            p
+            for p in original_sig.parameters.values()
+            if p.name != "session"
+            and p.kind
+            in (
+                inspect.Parameter.KEYWORD_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        public_sig = original_sig.replace(parameters=public_params)
+        public_anns = {
+            k: v for k, v in tool_fn.__annotations__.items() if k != "session"
+        }
+
+        def _make(
+            name: str, fn: Any, sig: inspect.Signature, anns: dict[str, Any]
+        ) -> Any:
+            async def wrapper(**kwargs: Any) -> str:
+                result = await fn(session, **kwargs)
+                captured.append(result)
+                return result.agent_message or "ok"
+
+            wrapper.__name__ = name
+            wrapper.__qualname__ = name
+            wrapper.__doc__ = TOOL_DESCRIPTIONS.get(
+                name, fn.__doc__ or f"MomDiary tool: {name}"
+            )
+            wrapper.__signature__ = sig  # type: ignore[attr-defined]
+            wrapper.__annotations__ = anns
+            return wrapper
+
+        wrappers.append(_make(tool_name, tool_fn, public_sig, public_anns))
+
+    # Pseudo-tool: the model can call this to request more info.
+    async def ask_for_clarification(
+        question: str, suggested_candidates: list[dict[str, Any]] | None = None
+    ) -> str:
+        """Ask the caregiver to clarify ambiguous input. Does not persist anything."""
+        captured.append(
+            AgentRunResult(
+                selected_tool="ask_for_clarification",
+                outcome="clarification_requested",
+                agent_message=question,
+                suggested_candidates=suggested_candidates,
+            )
+        )
+        return question
+
+    wrappers.append(ask_for_clarification)
+    return wrappers
+
+
+async def _format_context(
+    session: AsyncSession, entry_id: int | None, entry_type: str | None
+) -> str:
+    tz = await get_default_timezone(session)
+    now_local = datetime.now(tz)
+    lines = [
+        f"Current local time: {now_local.isoformat(timespec='seconds')} ({tz.key}).",
+        "When the caregiver omits a date, assume today in this timezone.",
+    ]
+    if entry_id is not None and entry_type is not None:
+        lines.append(
+            f"Authoritative target for this turn: entry_id={entry_id}, "
+            f"entry_type={entry_type}. Use the matching update_* or delete_* tool."
+        )
+    return "\n".join(lines)
+
+
+class MAFAgentRunner:
+    """Runs the real Microsoft Agent Framework agent end-to-end."""
+
+    async def run(
+        self,
+        message: str,
+        *,
+        session: AsyncSession,
+        correlation_id: str,
+        entry_id: int | None = None,
+        entry_type: str | None = None,
+    ) -> AgentRunResult:
+        captured: list[AgentRunResult] = []
+        tools = _build_tool_wrappers(session, captured)
+        bundle = build_agent(tools=tools)
+        logger.info(
+            "maf.agent.built",
+            correlation_id=correlation_id,
+            tool_count=len(tools),
+            hinted_entry_id=entry_id,
+            hinted_entry_type=entry_type,
+        )
+
+        context = await _format_context(session, entry_id, entry_type)
+        full_message = f"{context}\n\nCaregiver said: {message}"
+
+        logger.debug(
+            "maf.model.invoking",
+            correlation_id=correlation_id,
+            message_len=len(full_message),
+        )
+        try:
+            response = await bundle.agent.run(full_message)
+        except Exception:
+            logger.exception("maf.model.failed", correlation_id=correlation_id)
+            raise
+        logger.info(
+            "maf.model.completed",
+            correlation_id=correlation_id,
+            captured_tools=[c.selected_tool for c in captured],
+        )
+
+        if captured:
+            # If the model chose multiple tools we honour the last one;
+            # the dispatcher's audit row captures the final outcome.
+            return captured[-1]
+
+        # Model produced text but called no tool — surface as clarification.
+        text = (
+            getattr(response, "text", None)
+            or str(response)
+            or "Could you provide more details?"
+        )
+        logger.info(
+            "maf.no_tool_called",
+            correlation_id=correlation_id,
+            text_len=len(text),
+        )
+        return AgentRunResult(
+            selected_tool=None,
+            outcome="clarification_requested",
+            agent_message=text,
+        )
+
+
+# Convenience helper for endpoint-bypass paths (T068 deterministic update/delete).
+async def invoke_named_tool(
+    session: AsyncSession, name: str, **kwargs: Any
+) -> AgentRunResult:
+    return await invoke_tool(name, session, **kwargs)

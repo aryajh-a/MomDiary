@@ -1,0 +1,185 @@
+### MomDiary Baby Tracker — sample API calls
+### Use with the "REST Client" VS Code extension (humao.rest-client).
+### Run the backend first:
+###   cd backend; .\.venv\Scripts\Activate.ps1; uvicorn momdiary.main:app --reload --port 8000
+
+@baseUrl = http://localhost:8000
+@contentType = application/json
+
+###############################################################################
+# Health
+###############################################################################
+
+### Health check
+GET {{baseUrl}}/healthz
+
+
+###############################################################################
+# US1 — Log events via the agent (POST /v1/entries)
+###############################################################################
+
+### Log a feed (natural language)
+# @name logFeed
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Baby drank 120 ml of breast milk at 8am."
+}
+
+### Log a feed in ounces (the agent normalizes to ml)
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Baby had 120 ml of formula at 11:30am."
+}
+
+### Log a sleep session
+# @name logSleep
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Baby napped from 1pm to 2:30pm."
+}
+
+### Log a sleep that spans midnight (filed under start date — FR-009)
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Baby slept from 11:30pm last night until 1:15am."
+}
+
+### Log a poop with consistency
+# @name logPoop
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Soft poop around 10am."
+}
+
+### Log an upcoming appointment with a note
+# @name logAppointment
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Pediatrician appointment on May 20 at 9am — bring vaccination record."
+}
+
+### Ambiguous input → agent asks for clarification (FR-011, no entry persisted)
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Baby ate some formula."
+}
+
+
+###############################################################################
+# US2 — Read entries by local date (GET /v1/{type}?date=YYYY-MM-DD)
+###############################################################################
+
+@date = 2026-05-17
+
+### List feeds for a date
+GET {{baseUrl}}/v1/feeds?date={{date}}
+
+### List sleeps for a date
+GET {{baseUrl}}/v1/sleeps?date={{date}}
+
+### List poops for a date
+GET {{baseUrl}}/v1/poops?date={{date}}
+
+### List appointments for a date (includes any notes)
+GET {{baseUrl}}/v1/appointments?date={{date}}
+
+### Empty day → 200 with items: []
+GET {{baseUrl}}/v1/feeds?date=2026-01-01
+
+
+###############################################################################
+# US3 — Update / delete / annotate via the agent (PUT /v1/entries)
+###############################################################################
+
+### Update via natural language — agent resolves the target
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "The 8am feed was actually 150 ml, not 120 ml."
+}
+
+### Update with EXPLICIT (entry_id, entry_type) — FR-017 strict path, no resolution
+### Replace the entry_id with one returned from a previous POST.
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Correct the quantity to 150 ml.",
+  "entry_id": 1,
+  "entry_type": "feed"
+}
+
+### Ambiguous update → agent returns clarification with candidates (no mutation)
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Fix the morning feed."
+}
+
+### Append a note to an existing appointment (append-only — FR-006)
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Add a note to the pediatrician appointment: ask about shots."
+}
+
+### Soft-delete an entry (FR-018 — hidden from GETs and future resolution)
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Delete the 8am feed."
+}
+
+### Idempotent re-PUT (SC-006 — byte-identical response on identical input)
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Correct that feed to 150 ml.",
+  "entry_id": 1,
+  "entry_type": "feed"
+}
+
+
+###############################################################################
+# Error cases
+###############################################################################
+
+### Invalid date format → 422
+GET {{baseUrl}}/v1/feeds?date=not-a-date
+
+### Update a non-existent entry → 404
+PUT {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": "Bump quantity to 200 ml.",
+  "entry_id": 999999,
+  "entry_type": "feed"
+}
+
+### Empty message → 422
+POST {{baseUrl}}/v1/entries
+Content-Type: {{contentType}}
+
+{
+  "message": ""
+}

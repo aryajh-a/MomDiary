@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: MomDiary Baby Tracker Backend
+  version: 0.1.0
+  description: |
+    HTTP contract for the MomDiary Baby Tracker backend (feature
+    001-baby-tracker-backend). One conversational write endpoint (POST/PUT)
+    drives the agent; four date-scoped GET endpoints expose each event type.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+paths:
+  /v1/entries:
+    post:
+      operationId: createEntryByAgent
+      summary: Create a new entry from a natural-language message via the agent.
+      description: |
+        The user's natural-language message is forwarded to the MomDiary
+        agent, which selects a tool (log_feed / log_sleep / log_poop /
+        log_appointment) and persists exactly one entry per described event.
+        Required fields that cannot be resolved trigger a clarification
+        response instead of a fabricated entry (FR-011).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentWriteRequest'
+      responses:
+        '201':
+          description: Entry created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWriteResponse'
+        '200':
+          description: |
+            Clarification requested. No entry was created (FR-011).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentClarificationResponse'
+        '400':
+          description: Validation failure (FR-014); no entry created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      operationId: updateOrDeleteEntryByAgent
+      summary: Update or soft-delete an existing entry via the agent.
+      description: |
+        Same conversational envelope as POST. If `entry_id` and `entry_type`
+        are supplied (FR-017 hybrid contract), the server treats the call
+        as a deterministic update or delete of that record without letting
+        the agent retarget. If they are absent, the agent resolves the
+        target from the message and asks for clarification when ambiguous.
+        Repeated PUTs with identical normalized payloads are idempotent
+        (FR-015).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentWriteRequest'
+      responses:
+        '200':
+          description: Entry updated or soft-deleted; or clarification requested.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AgentWriteResponse'
+                  - $ref: '#/components/schemas/AgentClarificationResponse'
+        '404':
+          description: Explicit `entry_id` not found or already soft-deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Validation failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/feeds:
+    get:
+      operationId: listFeedsByDate
+      summary: List all non-deleted feed entries for a date.
+      parameters:
+        - $ref: '#/components/parameters/DateParam'
+      responses:
+        '200':
+          description: Ordered list (earliest first); empty when no entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedEntry'
+  /v1/sleeps:
+    get:
+      operationId: listSleepsByDate
+      summary: List all non-deleted sleep sessions whose start date matches.
+      parameters:
+        - $ref: '#/components/parameters/DateParam'
+      responses:
+        '200':
+          description: |
+            Ordered list (earliest start first). Sessions spanning midnight
+            are included on their start date with both timestamps intact
+            (FR-009).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SleepEntry'
+  /v1/poops:
+    get:
+      operationId: listPoopsByDate
+      summary: List all non-deleted poop entries for a date.
+      parameters:
+        - $ref: '#/components/parameters/DateParam'
+      responses:
+        '200':
+          description: Ordered list (earliest first).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PoopEntry'
+  /v1/appointments:
+    get:
+      operationId: listAppointmentsByDate
+      summary: List all non-deleted appointments for a date, with notes.
+      parameters:
+        - $ref: '#/components/parameters/DateParam'
+      responses:
+        '200':
+          description: Ordered list (earliest first); each item includes notes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AppointmentEntry'
+components:
+  parameters:
+    DateParam:
+      name: date
+      in: query
+      required: true
+      description: |
+        Local calendar date in the server's configured `default_timezone`
+        (FR-012, ISO-8601 YYYY-MM-DD).
+      schema:
+        type: string
+        format: date
+  schemas:
+    AgentWriteRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Natural-language utterance from the caregiver.
+        entry_id:
+          type: integer
+          nullable: true
+          description: |
+            Optional. When supplied with `entry_type`, the PUT is a
+            deterministic update or delete of that exact record (FR-017).
+        entry_type:
+          type: string
+          nullable: true
+          enum: [feed, sleep, poop, appointment]
+        correlation_id:
+          type: string
+          nullable: true
+          description: Optional client-supplied id; server generates one if absent.
+    AgentWriteResponse:
+      type: object
+      required: [outcome, entry_type, entry, correlation_id]
+      properties:
+        outcome:
+          type: string
+          enum: [created, updated, deleted]
+        entry_type:
+          type: string
+          enum: [feed, sleep, poop, appointment]
+        entry:
+          oneOf:
+            - $ref: '#/components/schemas/FeedEntry'
+            - $ref: '#/components/schemas/SleepEntry'
+            - $ref: '#/components/schemas/PoopEntry'
+            - $ref: '#/components/schemas/AppointmentEntry'
+        agent_message:
+          type: string
+          description: Natural-language confirmation generated by the agent.
+        correlation_id:
+          type: string
+    AgentClarificationResponse:
+      type: object
+      required: [outcome, agent_message, correlation_id]
+      properties:
+        outcome:
+          type: string
+          enum: [clarification_requested]
+        agent_message:
+          type: string
+          description: Question the agent is asking the caregiver.
+        suggested_candidates:
+          type: array
+          description: |
+            When clarification is needed to pick an existing entry, the
+            agent MAY return shortlist candidates.
+          items:
+            type: object
+            required: [entry_type, entry_id, summary]
+            properties:
+              entry_type: { type: string, enum: [feed, sleep, poop, appointment] }
+              entry_id: { type: integer }
+              summary: { type: string }
+        correlation_id:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error, message, correlation_id]
+      properties:
+        error:
+          type: string
+          description: Stable machine code, e.g. `validation_error`, `not_found`.
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        correlation_id:
+          type: string
+    FeedEntry:
+      type: object
+      required: [id, entry_type, feed_type, quantity, unit, occurred_at, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        entry_type: { type: string, enum: [feed] }
+        feed_type: { type: string, enum: [breast_milk, formula, solids, water] }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string, enum: [ml, g] }
+        occurred_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SleepEntry:
+      type: object
+      required: [id, entry_type, start_at, end_at, duration_minutes, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        entry_type: { type: string, enum: [sleep] }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PoopEntry:
+      type: object
+      required: [id, entry_type, occurred_at, consistency, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        entry_type: { type: string, enum: [poop] }
+        occurred_at: { type: string, format: date-time }
+        consistency: { type: string, enum: [watery, soft, formed, hard] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AppointmentEntry:
+      type: object
+      required: [id, entry_type, scheduled_at, notes, created_at, updated_at]
+      properties:
+        id: { type: integer }
+        entry_type: { type: string, enum: [appointment] }
+        scheduled_at: { type: string, format: date-time }
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppointmentNote'
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AppointmentNote:
+      type: object
+      required: [id, body, added_at]
+      properties:
+        id: { type: integer }
+        body: { type: string, minLength: 1, maxLength: 2000 }
+        added_at: { type: string, format: date-time }

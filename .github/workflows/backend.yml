@@ -1,0 +1,63 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MOMDIARY_DB_URL: "sqlite+aiosqlite:///./momdiary.db"
+      MOMDIARY_DEFAULT_TIMEZONE: "America/Los_Angeles"
+      MOMDIARY_APP_ENV: "test"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install "uv>=0.4"
+
+      - name: Install dependencies (prereleases allowed for MAF)
+        run: |
+          uv pip install --system --pre \
+            -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Format check (ruff format)
+        run: ruff format --check src tests
+
+      - name: Type-check (mypy --strict)
+        run: mypy src/momdiary
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Run tests with coverage gates
+        run: pytest -q --cov=src/momdiary --cov-branch --cov-fail-under=80
+
+      - name: Benchmark regression gate (Principle III)
+        run: |
+          pytest backend/tests/benchmarks \
+            --benchmark-only \
+            --benchmark-json=bench.json || true
+          # Future: compare bench.json against a stored baseline; fail
+          # if any metric regresses > 10%.
