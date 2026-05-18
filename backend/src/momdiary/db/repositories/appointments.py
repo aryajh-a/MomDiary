@@ -62,7 +62,7 @@ class AppointmentsRepository:
             )
             self._session.add(n)
             await self._session.flush()
-            await self._session.refresh(row, ["notes"])
+        await self._session.refresh(row, ["notes"])
         logger.info(
             "appointments.created",
             entry_id=row.id,

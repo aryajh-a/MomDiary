@@ -36,6 +36,6 @@ async def test_repeated_put_byte_identical(
     def canonical(payload: dict) -> dict:
         e = dict(payload["entry"])
         e.pop("updated_at", None)
-        return {**payload, "entry": e, "correlation_id": None}
+        return {**payload, "entry": e, "correlation_id": None, "session_id": None}
 
     assert canonical(r1.json()) == canonical(r2.json())

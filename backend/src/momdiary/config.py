@@ -28,6 +28,19 @@ class Settings(BaseSettings):
     momdiary_app_env: Literal["dev", "test", "prod"] = Field(default="dev")
     momdiary_allowed_origins: str = Field(default="http://localhost:5173")
 
+    # Chat session store (feature 003-chat-session-store).
+    # Per-session idle TTL in seconds (FR-010). Default: 24h.
+    momdiary_session_ttl_seconds: int = Field(default=86_400)
+    # Per-session FIFO turn-pair cap (FR-009). One pair == caregiver + assistant.
+    momdiary_session_max_turns: int = Field(default=50)
+    # Global LRU cap on resident sessions (FR-011).
+    momdiary_session_max_sessions: int = Field(default=100)
+    # Max bytes per caregiver message stored in session history (FR-012).
+    momdiary_session_message_max_bytes: int = Field(default=4_096)
+    # Token-aware trim budget when constructing the agent prompt (FR-013).
+    # Conservative under the gpt-4.1 16K context window.
+    momdiary_session_prompt_token_budget: int = Field(default=12_000)
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.momdiary_allowed_origins.split(",") if origin.strip()]

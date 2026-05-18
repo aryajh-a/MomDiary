@@ -1,0 +1,234 @@
+openapi: 3.1.0
+info:
+  title: MomDiary Backend — Chat Session Store Delta
+  version: 0.2.0
+  description: |
+    Additive delta to the feature-002 contract. Only the `/v1/entries`
+    endpoint is changed. All other endpoints (`/v1/feeds`, `/v1/sleeps`,
+    `/v1/poops`, `/v1/appointments`) are byte-identical to feature 002
+    and are NOT redeclared here.
+
+    Changes from feature 002:
+      1. The `POST /v1/entries` and `PUT /v1/entries` requests accept an
+         optional `X-Session-ID` header.
+      2. The response envelopes for `AgentWriteResponse`,
+         `AgentClarificationResponse`, and `ErrorResponse` gain a
+         REQUIRED `session_id` string field (UUID v4).
+      3. All `/v1/entries` responses set the `X-Session-ID` response
+         header to the same UUID echoed in the body.
+
+paths:
+  /v1/entries:
+    post:
+      summary: Submit a chat message to the diary agent (with session context).
+      parameters:
+        - in: header
+          name: X-Session-ID
+          required: false
+          description: |
+            Opaque session identifier issued by a previous response. When
+            absent, unknown, or expired, the server issues a fresh
+            session id and returns it in both `X-Session-ID` and the
+            response body's `session_id` field.
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: X-Correlation-ID
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentWriteRequest"
+      responses:
+        "200":
+          description: Updated/deleted/clarification outcome.
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+            X-Correlation-ID:
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AgentWriteResponse"
+                  - $ref: "#/components/schemas/AgentClarificationResponse"
+        "201":
+          description: Created outcome.
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+            X-Correlation-ID:
+              required: true
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWriteResponse"
+        "400":
+          description: Validation error (e.g., caregiver message exceeds the max-bytes cap).
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Referenced entry not found.
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+    put:
+      summary: Direct/deterministic update or delete (same session semantics as POST).
+      parameters:
+        - in: header
+          name: X-Session-ID
+          required: false
+          schema: { type: string, format: uuid }
+        - in: header
+          name: X-Correlation-ID
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentWriteRequest"
+      responses:
+        "200":
+          description: Updated/deleted/clarification (same envelopes as POST).
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AgentWriteResponse"
+                  - $ref: "#/components/schemas/AgentClarificationResponse"
+        "400":
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          headers:
+            X-Session-ID:
+              required: true
+              schema: { type: string, format: uuid }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+components:
+  schemas:
+    AgentWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        entry_id:
+          type: integer
+          nullable: true
+        entry_type:
+          type: string
+          enum: [feed, sleep, poop, appointment]
+          nullable: true
+        correlation_id:
+          type: string
+          nullable: true
+
+    AgentWriteResponse:
+      type: object
+      additionalProperties: false
+      required: [outcome, entry_type, entry, correlation_id, session_id]
+      properties:
+        outcome:
+          type: string
+          enum: [created, updated, deleted]
+        entry_type:
+          type: string
+          enum: [feed, sleep, poop, appointment]
+        entry:
+          description: Entry payload (see feature 002 contract for the polymorphic schema).
+          type: object
+        agent_message:
+          type: string
+          nullable: true
+        correlation_id:
+          type: string
+        session_id:
+          type: string
+          format: uuid
+          description: |
+            The session this turn was attributed to. The client MUST echo
+            this value on the next request's `X-Session-ID` header to
+            preserve conversational context.
+
+    AgentClarificationResponse:
+      type: object
+      additionalProperties: false
+      required: [outcome, agent_message, correlation_id, session_id]
+      properties:
+        outcome:
+          type: string
+          enum: [clarification_requested]
+        agent_message:
+          type: string
+        suggested_candidates:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [entry_type, entry_id, summary]
+            properties:
+              entry_type:
+                type: string
+                enum: [feed, sleep, poop, appointment]
+              entry_id: { type: integer }
+              summary: { type: string }
+        correlation_id: { type: string }
+        session_id:
+          type: string
+          format: uuid
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, message, correlation_id, session_id]
+      properties:
+        error:
+          type: string
+          enum: [validation_error, not_found, internal_error]
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+        correlation_id: { type: string }
+        session_id:
+          type: string
+          format: uuid

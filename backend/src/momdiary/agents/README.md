@@ -51,3 +51,23 @@ Integration tests do not call the live model. `tests/conftest.py` exposes
 a `ScriptedAgent` that pops `(tool_name, kwargs)` pairs off a queue and
 invokes them through `tools.registry.invoke_tool`. This means every
 integration test exercises the real repositories and the real audit path.
+
+
+## Session Store (feature 003)
+
+session_store.py provides an in-memory, bounded, per-process chat-session store
+that threads turn history into the agent via MAFAgentRunner.run(..., history=...).
+
+- See [plan](../../../../specs/003-chat-session-store/plan.md),
+  [data-model](../../../../specs/003-chat-session-store/data-model.md),
+  and [quickstart](../../../../specs/003-chat-session-store/quickstart.md).
+- Caps: TTL (`MOMDIARY_SESSION_TTL_SECONDS`), FIFO turn cap
+  (`MOMDIARY_SESSION_MAX_TURNS`), LRU session cap
+  (`MOMDIARY_SESSION_MAX_SESSIONS`), per-message byte cap
+  (`MOMDIARY_SESSION_MESSAGE_MAX_BYTES`), and prompt token budget
+  (`MOMDIARY_SESSION_PROMPT_TOKEN_BUDGET`).
+- Structured log events: `session.created`, `session.appended`,
+  `session.evicted`, `session.expired`.
+- Failure mode (FR-016): if `store.append` raises, the HTTP response still
+  surfaces the normal write outcome and a `session.append_failed` WARN log is
+  emitted.

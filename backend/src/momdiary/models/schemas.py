@@ -40,6 +40,7 @@ class AgentClarificationResponse(_StrictModel):
     agent_message: str
     suggested_candidates: list[SuggestedCandidate] | None = None
     correlation_id: str
+    session_id: str
 
 
 class ErrorResponse(_StrictModel):
@@ -47,6 +48,7 @@ class ErrorResponse(_StrictModel):
     message: str
     details: dict[str, object] | None = None
     correlation_id: str
+    session_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ class AgentWriteResponse(_StrictModel):
     entry: EntryPayload
     agent_message: str | None = None
     correlation_id: str
+    session_id: str
 
 
 # ---------------------------------------------------------------------------

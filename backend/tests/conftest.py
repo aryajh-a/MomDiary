@@ -25,18 +25,6 @@ from momdiary.services.time_service import reset_timezone_cache
 
 
 # ---------------------------------------------------------------------------
-# Event loop (session scope for async fixtures)
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-# ---------------------------------------------------------------------------
 # Ephemeral SQLite + migrations
 # ---------------------------------------------------------------------------
 
@@ -63,6 +51,10 @@ async def configured_app(
     get_settings.cache_clear()  # type: ignore[attr-defined]
     reset_engine_for_tests()
     reset_timezone_cache()
+
+    from momdiary.api.dependencies import reset_session_store_for_tests
+
+    reset_session_store_for_tests()
 
     from alembic import command
     from alembic.config import Config
@@ -129,6 +121,7 @@ class ScriptedAgent:
         correlation_id: str,
         entry_id: int | None = None,
         entry_type: str | None = None,
+        history: list[Any] | None = None,
     ) -> AgentRunResult:
         self.calls.append(
             {
@@ -136,6 +129,7 @@ class ScriptedAgent:
                 "correlation_id": correlation_id,
                 "entry_id": entry_id,
                 "entry_type": entry_type,
+                "history": list(history) if history is not None else [],
             }
         )
         if not self._queue:

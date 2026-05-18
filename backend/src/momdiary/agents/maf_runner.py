@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.diary_agent import build_agent
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.session_store import ChatTurn
 from momdiary.agents.tools.registry import TOOL_REGISTRY, invoke_tool
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import get_default_timezone
@@ -163,6 +164,33 @@ async def _format_context(
     return "\n".join(lines)
 
 
+def _render_history(history: list[ChatTurn]) -> str:
+    """Render prior turns as plain-text role-prefixed lines (FR-004).
+
+    Format mirrors the canonical sequence in `plan.md#agent-invocation-flow`.
+    Empty history -> empty string (caller elides the "Conversation so far:" block).
+    Assistant turns whose outcome was a write (created/updated/deleted) get a
+    trailing `(<outcome> <entry_type>#<entry_id>)` parenthetical so the model
+    can resolve references like "the feed I just logged" without re-reading
+    the database.
+    """
+    if not history:
+        return ""
+    lines: list[str] = []
+    for turn in history:
+        prefix = "Caregiver" if turn.role == "caregiver" else "Assistant"
+        line = f"{prefix}: {turn.text}"
+        if (
+            turn.role == "assistant"
+            and turn.outcome in {"created", "updated", "deleted"}
+            and turn.entry_type is not None
+            and turn.entry_id is not None
+        ):
+            line += f" ({turn.outcome} {turn.entry_type}#{turn.entry_id})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 class MAFAgentRunner:
     """Runs the real Microsoft Agent Framework agent end-to-end."""
 
@@ -174,7 +202,12 @@ class MAFAgentRunner:
         correlation_id: str,
         entry_id: int | None = None,
         entry_type: str | None = None,
+        history: list[ChatTurn] | None = None,
     ) -> AgentRunResult:
+        assert history is not None, (
+            "MAFAgentRunner.run: `history` is required (pass [] for fresh sessions). "
+            "FR-004 enforces that the dispatcher always supplies the recent_view."
+        )
         captured: list[AgentRunResult] = []
         tools = _build_tool_wrappers(session, captured)
         bundle = build_agent(tools=tools)
@@ -184,10 +217,19 @@ class MAFAgentRunner:
             tool_count=len(tools),
             hinted_entry_id=entry_id,
             hinted_entry_type=entry_type,
+            history_turns=len(history),
         )
 
         context = await _format_context(session, entry_id, entry_type)
-        full_message = f"{context}\n\nCaregiver said: {message}"
+        history_block = _render_history(history)
+        if history_block:
+            full_message = (
+                f"{context}\n\n"
+                f"Conversation so far:\n{history_block}\n\n"
+                f"Caregiver said: {message}"
+            )
+        else:
+            full_message = f"{context}\n\nCaregiver said: {message}"
 
         logger.debug(
             "maf.model.invoking",

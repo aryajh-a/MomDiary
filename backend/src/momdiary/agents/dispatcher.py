@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,9 @@ from momdiary.db.repositories.agent_interactions import (
 from momdiary.observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from momdiary.agents.session_store import ChatTurn
 
 
 @dataclass(slots=True)
@@ -43,6 +46,7 @@ class AgentRunner(Protocol):
         correlation_id: str,
         entry_id: int | None = None,
         entry_type: str | None = None,
+        history: list[ChatTurn] | None = None,
     ) -> AgentRunResult: ...
 
 
@@ -67,6 +71,7 @@ class AgentDispatcher:
         correlation_id: str,
         entry_id: int | None = None,
         entry_type: str | None = None,
+        history: list[ChatTurn] | None = None,
     ) -> DispatchResult:
         logger.info(
             "dispatch.started",
@@ -74,6 +79,7 @@ class AgentDispatcher:
             message_len=len(message),
             hinted_entry_id=entry_id,
             hinted_entry_type=entry_type,
+            history_turns=0 if history is None else len(history),
         )
         started = time.perf_counter()
         try:
@@ -83,6 +89,7 @@ class AgentDispatcher:
                 correlation_id=correlation_id,
                 entry_id=entry_id,
                 entry_type=entry_type,
+                history=history if history is not None else [],
             )
         except Exception:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
