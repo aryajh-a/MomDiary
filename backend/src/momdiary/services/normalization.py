@@ -10,6 +10,7 @@ OZ_TO_ML = 29.5735
 FEED_TYPE_CANONICAL: dict[str, str] = {
     "breast_milk": "breast_milk",
     "breastmilk": "breast_milk",
+    "milk" : "breast_milk",
     "breast": "breast_milk",
     "bm": "breast_milk",
     "formula": "formula",

@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     momdiary_db_url: str = Field(default="sqlite+aiosqlite:///./momdiary.db")
     momdiary_default_timezone: str = Field(default="America/Los_Angeles")
     momdiary_app_env: Literal["dev", "test", "prod"] = Field(default="dev")
+    momdiary_allowed_origins: str = Field(default="http://localhost:5173")
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.momdiary_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache(maxsize=1)

@@ -1,0 +1,16 @@
+{
+  "outcome": "created",
+  "entry_type": "feed",
+  "entry_id": 42,
+  "payload": {
+    "id": 42,
+    "feed_type": "breast_milk",
+    "quantity": 120,
+    "unit": "ml",
+    "occurred_at": "2026-05-17T11:05:00-07:00",
+    "created_at": "2026-05-17T11:05:01-07:00",
+    "updated_at": "2026-05-17T11:05:01-07:00"
+  },
+  "agent_message": "Logged 120 ml of breast milk.",
+  "correlation_id": "ec4dc709-a203-4060-b10b-c8eb2ab39c5c"
+}

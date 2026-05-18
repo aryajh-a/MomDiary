@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: MomDiary backend — frontend-consumed slice
+  version: 0.1.0
+  description: |
+    Subset of the MomDiary backend OpenAPI surface that the UX in feature
+    `002-tracker-ux-chat` depends on. The authoritative schemas live in
+    `backend/src/momdiary/models/schemas.py` and the full backend spec is
+    in `specs/001-baby-tracker-backend/contracts/`. This slice exists so
+    the frontend's contract tests can validate against a stable artifact.
+servers:
+  - url: http://localhost:8000
+paths:
+  /v1/feeds:
+    get:
+      operationId: listFeeds
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeedListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+  /v1/sleeps:
+    get:
+      operationId: listSleeps
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SleepListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+  /v1/poops:
+    get:
+      operationId: listPoops
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PoopListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+  /v1/appointments:
+    get:
+      operationId: listAppointments
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AppointmentListResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+  /v1/entries:
+    post:
+      operationId: postEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentWriteRequest" }
+      responses:
+        "200": { description: Clarification / update / delete, content: { application/json: { schema: { $ref: "#/components/schemas/AgentWriteResponse" } } } }
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AgentWriteResponse" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+components:
+  schemas:
+    FeedEntry:
+      type: object
+      required: [id, feed_type, quantity, unit, occurred_at, created_at, updated_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        feed_type: { type: string, enum: [breast_milk, formula, solids, water] }
+        quantity: { type: number, exclusiveMinimum: 0 }
+        unit: { type: string, enum: [ml, g] }
+        occurred_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SleepEntry:
+      type: object
+      required: [id, start_at, end_at, duration_minutes, created_at, updated_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PoopEntry:
+      type: object
+      required: [id, occurred_at, consistency, created_at, updated_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        occurred_at: { type: string, format: date-time }
+        consistency: { type: string, enum: [watery, soft, formed, hard] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AppointmentNote:
+      type: object
+      required: [id, body, added_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        body: { type: string, minLength: 1, maxLength: 2000 }
+        added_at: { type: string, format: date-time }
+    AppointmentEntry:
+      type: object
+      required: [id, scheduled_at, notes, created_at, updated_at]
+      properties:
+        id: { type: integer, minimum: 1 }
+        scheduled_at: { type: string, format: date-time }
+        notes:
+          type: array
+          items: { $ref: "#/components/schemas/AppointmentNote" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    FeedListResponse:
+      type: object
+      required: [date, items]
+      properties:
+        date: { type: string, format: date }
+        items: { type: array, items: { $ref: "#/components/schemas/FeedEntry" } }
+    SleepListResponse:
+      type: object
+      required: [date, items]
+      properties:
+        date: { type: string, format: date }
+        items: { type: array, items: { $ref: "#/components/schemas/SleepEntry" } }
+    PoopListResponse:
+      type: object
+      required: [date, items]
+      properties:
+        date: { type: string, format: date }
+        items: { type: array, items: { $ref: "#/components/schemas/PoopEntry" } }
+    AppointmentListResponse:
+      type: object
+      required: [date, items]
+      properties:
+        date: { type: string, format: date }
+        items: { type: array, items: { $ref: "#/components/schemas/AppointmentEntry" } }
+    AgentWriteRequest:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        entry_id: { type: integer, minimum: 1, nullable: true }
+        entry_type: { type: string, enum: [feed, sleep, poop, appointment], nullable: true }
+        correlation_id: { type: string, nullable: true }
+    TargetCandidate:
+      type: object
+      required: [entry_type, entry_id, label]
+      properties:
+        entry_type: { type: string, enum: [feed, sleep, poop, appointment] }
+        entry_id: { type: integer, minimum: 1 }
+        label: { type: string }
+    AgentWriteResponse:
+      type: object
+      required: [outcome, agent_message, correlation_id]
+      properties:
+        outcome:
+          type: string
+          enum: [created, updated, deleted, clarification_requested, rejected]
+        entry_type:
+          type: string
+          enum: [feed, sleep, poop, appointment]
+          nullable: true
+        entry_id: { type: integer, minimum: 1, nullable: true }
+        payload:
+          description: Present on `created` / `updated`. Shape matches the matching `*Entry` schema.
+          type: object
+          nullable: true
+        agent_message: { type: string }
+        correlation_id: { type: string }
+        unchanged: { type: boolean, nullable: true }
+        suggested_candidates:
+          type: array
+          items: { $ref: "#/components/schemas/TargetCandidate" }
+          nullable: true
+    ErrorBody:
+      type: object
+      required: [error, message, correlation_id]
+      properties:
+        error: { type: string }
+        message: { type: string }
+        correlation_id: { type: string }
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
