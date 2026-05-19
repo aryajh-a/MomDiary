@@ -42,6 +42,20 @@ function newCorrelationId(): string {
   return `${r()}-${r().slice(0, 4)}-4${r().slice(0, 3)}-8${r().slice(0, 3)}-${r()}${r().slice(0, 4)}`;
 }
 
+// Module-level chat session id. Set from the first `X-Session-ID` response
+// header on /v1/entries and replayed on every subsequent request so the
+// backend's in-memory SessionStore can thread conversation history into the
+// agent (feature 003-chat-session-store).
+let currentSessionId: string | null = null;
+
+export function getSessionId(): string | null {
+  return currentSessionId;
+}
+
+export function resetSessionId(): void {
+  currentSessionId = null;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit,
@@ -51,6 +65,9 @@ async function request<T>(
   const headers = new Headers(init.headers);
   headers.set("X-Correlation-ID", correlationId);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (currentSessionId && !headers.has("X-Session-ID")) {
+    headers.set("X-Session-ID", currentSessionId);
+  }
 
   let response: Response;
   try {
@@ -62,6 +79,11 @@ async function request<T>(
       message: cause instanceof Error ? cause.message : "Network error",
       correlationId,
     });
+  }
+
+  const returnedSessionId = response.headers.get("X-Session-ID");
+  if (returnedSessionId) {
+    currentSessionId = returnedSessionId;
   }
 
   const text = await response.text();

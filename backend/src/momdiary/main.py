@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.allowed_origins_list,
         allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["*"],
+        expose_headers=["X-Session-ID", "X-Correlation-ID"],
         allow_credentials=False,
     )
     app.add_middleware(CorrelationIdMiddleware)

@@ -11,12 +11,13 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
-from momdiary.agents.tools import appointments, feeds, poops, sleeps
+from momdiary.agents.tools import appointments, feeds, poops, reads, sleeps
 from momdiary.observability.logging import get_logger
 
 logger = get_logger(__name__)
 
 ToolFn = Callable[..., Awaitable[AgentRunResult]]
+ReadToolFn = Callable[..., Awaitable[dict[str, Any]]]
 
 TOOL_REGISTRY: dict[str, ToolFn] = {
     # log_*
@@ -36,6 +37,16 @@ TOOL_REGISTRY: dict[str, ToolFn] = {
     "delete_appointment": appointments.delete_appointment,
     # notes
     "add_appointment_note": appointments.add_appointment_note,
+}
+
+# Read-only tools. Kept separate because they return raw data dicts rather
+# than `AgentRunResult` envelopes and must NOT be treated as the final
+# write outcome by the runner.
+READ_TOOL_REGISTRY: dict[str, ReadToolFn] = {
+    "list_feeds": reads.list_feeds,
+    "list_sleeps": reads.list_sleeps,
+    "list_poops": reads.list_poops,
+    "list_appointments": reads.list_appointments,
 }
 
 

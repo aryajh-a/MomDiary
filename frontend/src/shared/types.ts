@@ -104,28 +104,29 @@ const correlationId = z.string().min(1);
 export const agentCreatedSchema = z.object({
   outcome: z.literal("created"),
   entry_type: entryTypeSchema,
-  entry_id: z.number().int().positive(),
-  payload: anyEntrySchema,
+  entry: anyEntrySchema,
   agent_message: z.string(),
   correlation_id: correlationId,
+  session_id: z.string().optional(),
 });
 
 export const agentUpdatedSchema = z.object({
   outcome: z.literal("updated"),
   entry_type: entryTypeSchema,
-  entry_id: z.number().int().positive(),
-  payload: anyEntrySchema,
+  entry: anyEntrySchema,
   agent_message: z.string(),
   correlation_id: correlationId,
+  session_id: z.string().optional(),
   unchanged: z.boolean().optional(),
 });
 
 export const agentDeletedSchema = z.object({
   outcome: z.literal("deleted"),
   entry_type: entryTypeSchema,
-  entry_id: z.number().int().positive(),
+  entry: anyEntrySchema,
   agent_message: z.string(),
   correlation_id: correlationId,
+  session_id: z.string().optional(),
 });
 
 export const targetCandidateSchema = z.object({
@@ -139,12 +140,14 @@ export const agentClarificationSchema = z.object({
   agent_message: z.string(),
   suggested_candidates: z.array(targetCandidateSchema).optional(),
   correlation_id: correlationId,
+  session_id: z.string().optional(),
 });
 
 export const agentRejectedSchema = z.object({
   outcome: z.literal("rejected"),
   agent_message: z.string(),
   correlation_id: correlationId,
+  session_id: z.string().optional(),
 });
 
 export const agentWriteResponseSchema = z.discriminatedUnion("outcome", [

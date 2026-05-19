@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useReducer } from "react";
-import { useSelectedDate } from "@/features/date/useSelectedDate";
 import { ApiError, apiClient } from "@/shared/apiClient";
-import { entryTypeToSection, queryKeys } from "@/shared/queryKeys";
+import { entryTypeToSection } from "@/shared/queryKeys";
 import type { AgentWriteResponse } from "@/shared/types";
 import { chatReducer } from "./reducer";
 import { INITIAL_CHAT, type ChatMessage } from "./types";
@@ -16,7 +15,6 @@ function makeId(): string {
 export function useChat() {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT);
   const qc = useQueryClient();
-  const { date } = useSelectedDate();
 
   const mutation = useMutation({
     mutationFn: (message: string) => apiClient.postEntry({ message }),
@@ -57,7 +55,10 @@ export function useChat() {
         ) {
           const section = entryTypeToSection[response.entry_type];
           if (section) {
-            await qc.invalidateQueries({ queryKey: queryKeys[section](date) });
+            // Invalidate every cached date for this section: the entry's
+            // `occurred_at` may land on a different day than the currently
+            // selected one, so a date-scoped invalidation can silently miss.
+            await qc.invalidateQueries({ queryKey: [section] });
           }
         }
       } catch (cause) {
@@ -77,7 +78,7 @@ export function useChat() {
         dispatch({ type: "error", assistantMessage, preservedDraft: draft });
       }
     },
-    [state.inFlight, mutation, qc, date],
+    [state.inFlight, mutation, qc],
   );
 
   return {

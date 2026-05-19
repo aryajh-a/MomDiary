@@ -8,6 +8,7 @@ registry so production and scripted tests share one execution path.
 from __future__ import annotations
 
 import inspect
+import json
 from datetime import datetime
 from typing import Any
 
@@ -16,7 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from momdiary.agents.diary_agent import build_agent
 from momdiary.agents.dispatcher import AgentRunResult
 from momdiary.agents.session_store import ChatTurn
-from momdiary.agents.tools.registry import TOOL_REGISTRY, invoke_tool
+from momdiary.agents.tools.registry import (
+    READ_TOOL_REGISTRY,
+    TOOL_REGISTRY,
+    invoke_tool,
+)
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import get_default_timezone
 
@@ -80,6 +85,26 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Notes are append-only; never overwrite existing notes. "
         "appointment_id is required."
     ),
+    # --- read-only tools (do not mutate state) ---
+    "list_feeds": (
+        "List all feed entries for a local date (YYYY-MM-DD). If `date` is "
+        "omitted, defaults to today in the configured timezone. Use to answer "
+        "questions like 'what feeds today?' or to resolve which entry the "
+        "caregiver means before an update/delete. Returns "
+        '{"date", "count", "items": [...]}.'
+    ),
+    "list_sleeps": (
+        "List all sleep entries that STARTED on a local date (YYYY-MM-DD). "
+        "Defaults to today. Returns {\"date\", \"count\", \"items\": [...]}."
+    ),
+    "list_poops": (
+        "List all poop entries for a local date (YYYY-MM-DD). Defaults to "
+        "today. Returns {\"date\", \"count\", \"items\": [...]}."
+    ),
+    "list_appointments": (
+        "List all appointments scheduled on a local date (YYYY-MM-DD). "
+        "Defaults to today. Returns {\"date\", \"count\", \"items\": [...]}."
+    ),
 }
 
 
@@ -127,6 +152,51 @@ def _build_tool_wrappers(
             return wrapper
 
         wrappers.append(_make(tool_name, tool_fn, public_sig, public_anns))
+
+    # Read-only tools: execute, serialize the result back to the model as
+    # JSON text, and do NOT append to `captured` (so they never become the
+    # final response envelope; the model uses their data to answer or to
+    # choose a follow-up write/delete tool).
+    for read_name, read_fn in READ_TOOL_REGISTRY.items():
+        read_sig = inspect.signature(read_fn)
+        read_public_params = [
+            p
+            for p in read_sig.parameters.values()
+            if p.name != "session"
+            and p.kind
+            in (
+                inspect.Parameter.KEYWORD_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        read_public_sig = read_sig.replace(parameters=read_public_params)
+        read_public_anns = {
+            k: v for k, v in read_fn.__annotations__.items() if k != "session"
+        }
+
+        def _make_read(
+            name: str, fn: Any, sig: inspect.Signature, anns: dict[str, Any]
+        ) -> Any:
+            async def wrapper(**kwargs: Any) -> str:
+                try:
+                    data = await fn(session, **kwargs)
+                except ValueError as exc:
+                    return json.dumps({"error": "validation_error", "message": str(exc)})
+                except Exception as exc:  # noqa: BLE001 - surface to model, never crash
+                    logger.exception("read_tool.failed", tool=name)
+                    return json.dumps({"error": "internal_error", "message": str(exc)})
+                return json.dumps(data, default=str)
+
+            wrapper.__name__ = name
+            wrapper.__qualname__ = name
+            wrapper.__doc__ = TOOL_DESCRIPTIONS.get(
+                name, fn.__doc__ or f"MomDiary read tool: {name}"
+            )
+            wrapper.__signature__ = sig  # type: ignore[attr-defined]
+            wrapper.__annotations__ = anns
+            return wrapper
+
+        wrappers.append(_make_read(read_name, read_fn, read_public_sig, read_public_anns))
 
     # Pseudo-tool: the model can call this to request more info.
     async def ask_for_clarification(
