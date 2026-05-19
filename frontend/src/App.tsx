@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { DateBar } from "@/features/date/DateBar";
 import { SelectedDateProvider, useSelectedDate } from "@/features/date/useSelectedDate";
 import { AppointmentsSection } from "@/features/appointments/AppointmentsSection";
@@ -7,6 +7,8 @@ import { FeedsSection } from "@/features/feeds/FeedsSection";
 import { PoopsSection } from "@/features/poops/PoopsSection";
 import { SleepsSection } from "@/features/sleeps/SleepsSection";
 import { queryKeys } from "@/shared/queryKeys";
+
+const CHAT_VISIBLE_STORAGE_KEY = "momdiary.chatVisible";
 
 const ChatPanel = lazy(() =>
   import("@/features/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })),
@@ -39,8 +41,22 @@ function RefreshButton(): JSX.Element {
 }
 
 function AppShell(): JSX.Element {
+  const [chatVisible, setChatVisible] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(CHAT_VISIBLE_STORAGE_KEY);
+    return stored === null ? true : stored === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(CHAT_VISIBLE_STORAGE_KEY, String(chatVisible));
+  }, [chatVisible]);
+
+  const hideChat = useCallback(() => setChatVisible(false), []);
+  const showChat = useCallback(() => setChatVisible(true), []);
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 p-4 pb-32">
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 p-4 pb-24">
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">MomDiary</h1>
         <div className="flex items-center gap-2">
@@ -52,11 +68,26 @@ function AppShell(): JSX.Element {
       <SleepsSection />
       <PoopsSection />
       <AppointmentsSection />
-      <footer className="fixed inset-x-0 bottom-0 mx-auto max-w-md">
-        <Suspense fallback={<div className="p-4 text-slate-500 text-sm">Loading chat…</div>}>
-          <ChatPanel />
-        </Suspense>
-      </footer>
+      {chatVisible ? (
+        <div
+          className="fixed right-4 bottom-4 z-20 w-[min(calc(100vw-2rem),26rem)] origin-bottom-right animate-[chatPop_180ms_ease-out]"
+          role="dialog"
+          aria-label="Chat"
+        >
+          <Suspense fallback={<div className="p-4 text-slate-500 text-sm">Loading chat…</div>}>
+            <ChatPanel onHide={hideChat} />
+          </Suspense>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={showChat}
+          aria-label="Show chat"
+          className="fixed right-4 bottom-4 z-20 rounded-full bg-slate-900 px-4 py-3 text-sm text-white shadow-lg hover:bg-slate-700"
+        >
+          💬 Chat
+        </button>
+      )}
     </main>
   );
 }

@@ -11,10 +11,29 @@ interface Props {
   icon?: ReactNode;
   accentClass?: string;
   children?: ReactNode;
+  /**
+   * When the list exceeds this many items, the list becomes vertically
+   * scrollable within a fixed height instead of expanding the page.
+   * Set to `Infinity` to disable scrolling. Defaults to 5.
+   */
+  scrollAfter?: number;
 }
 
 export function SectionShell(props: Props): JSX.Element {
-  const { title, ariaLabel, isLoading, isError, count, emptyText, onRetry, icon, accentClass, children } = props;
+  const {
+    title,
+    ariaLabel,
+    isLoading,
+    isError,
+    count,
+    emptyText,
+    onRetry,
+    icon,
+    accentClass,
+    children,
+    scrollAfter = 5,
+  } = props;
+  const isScrollable = count > scrollAfter;
   return (
     <section
       role="region"
@@ -27,6 +46,11 @@ export function SectionShell(props: Props): JSX.Element {
         <span className="text-slate-500 text-xs" aria-label="count">
           ({count})
         </span>
+        {isScrollable ? (
+          <span className="ml-auto text-slate-400 text-xs" aria-hidden="true">
+            scroll ↕
+          </span>
+        ) : null}
       </header>
       {isLoading ? (
         <p className="text-slate-500 text-sm" role="status">
@@ -46,7 +70,15 @@ export function SectionShell(props: Props): JSX.Element {
       ) : count === 0 ? (
         <p className="text-slate-500 text-sm">{emptyText}</p>
       ) : (
-        <ul className="flex flex-col gap-2">{children}</ul>
+        <ul
+          className={`flex flex-col gap-2 ${
+            isScrollable
+              ? "max-h-72 overflow-y-auto rounded border border-slate-200 bg-white/60 p-2"
+              : ""
+          }`}
+        >
+          {children}
+        </ul>
       )}
     </section>
   );

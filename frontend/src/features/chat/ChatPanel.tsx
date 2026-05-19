@@ -2,7 +2,11 @@ import { useCallback } from "react";
 import { ChatMessageList } from "./ChatMessageList";
 import { useChat } from "./useChat";
 
-export function ChatPanel(): JSX.Element {
+interface ChatPanelProps {
+  onHide?: () => void;
+}
+
+export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
   const { messages, inFlight, draft, setDraft, submit } = useChat();
 
   const onSubmit = useCallback(
@@ -16,8 +20,20 @@ export function ChatPanel(): JSX.Element {
   return (
     <section
       aria-label="Chat"
-      className="mx-auto flex w-full max-w-md flex-col gap-2 rounded-t-2xl border-slate-200 border-t bg-white p-3 shadow-lg"
+      className="mx-auto flex w-full max-w-md flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg lg:max-w-none"
     >
+      {onHide ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onHide}
+            aria-label="Hide chat"
+            className="rounded px-2 py-0.5 text-slate-500 text-xs hover:bg-slate-100 hover:text-slate-900"
+          >
+            ✕ Hide
+          </button>
+        </div>
+      ) : null}
       <ChatMessageList messages={messages} />
       {inFlight ? (
         <p className="text-slate-500 text-xs" role="status" aria-live="polite">
