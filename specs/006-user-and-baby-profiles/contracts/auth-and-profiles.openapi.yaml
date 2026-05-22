@@ -1,0 +1,293 @@
+openapi: 3.0.3
+info:
+  title: MomDiary auth & profile endpoints
+  version: 0.1.0
+  description: |
+    Endpoints introduced by feature 006-user-and-baby-profiles. All endpoints
+    except the four under `/v1/auth/*` require a valid session cookie. Every
+    request that operates on baby-scoped data SHOULD also send the
+    `X-Active-Baby-Id` header; if absent, the server falls back to
+    `users.active_baby_id`.
+
+servers:
+  - url: http://localhost:8000
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: momdiary_session
+
+  parameters:
+    ActiveBabyHeader:
+      name: X-Active-Baby-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: Identifier of the baby the request should operate against. Overrides the user's stored `active_baby_id` for this request only. Must reference a baby owned by the authenticated caregiver.
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_credentials
+                - invalid_input
+                - unauthenticated
+                - no_active_baby
+                - not_found
+                - conflict
+            message: { type: string }
+
+    User:
+      type: object
+      required: [id, email, display_name, created_at]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        active_baby_id: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Baby:
+      type: object
+      required: [id, owner_user_id, display_name, date_of_birth, created_at]
+      properties:
+        id: { type: string }
+        owner_user_id: { type: string }
+        display_name: { type: string }
+        date_of_birth: { type: string, format: date }
+        color_tag: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 256 }
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    BabyCreate:
+      type: object
+      required: [display_name, date_of_birth]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+        date_of_birth: { type: string, format: date }
+        color_tag: { type: string, maxLength: 16, nullable: true }
+
+    BabyUpdate:
+      type: object
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+        date_of_birth: { type: string, format: date }
+        color_tag: { type: string, maxLength: 16, nullable: true }
+
+    SetActiveBabyRequest:
+      type: object
+      required: [baby_id]
+      properties:
+        baby_id: { type: string }
+
+    UserUpdate:
+      type: object
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+
+security:
+  - sessionCookie: []
+
+paths:
+  /v1/auth/register:
+    post:
+      summary: Register a new caregiver account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Account created and signed in. Sets the `momdiary_session` cookie.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400":
+          description: Validation failure.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "401":
+          description: Identifier rejected (collision is reported with the same shape as a credential rejection, per FR-006).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/auth/login:
+    post:
+      summary: Sign in an existing caregiver.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Signed in. Sets the `momdiary_session` cookie.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401":
+          description: Credential rejected (uniform message, no enumeration; per FR-006).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/auth/logout:
+    post:
+      summary: Invalidate the current session.
+      responses:
+        "204":
+          description: Signed out. Clears the `momdiary_session` cookie.
+
+  /v1/auth/me:
+    get:
+      summary: Return the currently authenticated caregiver.
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/users/me:
+    put:
+      summary: Update the current caregiver's profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400":
+          description: Validation failure.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/users/me/active-baby:
+    post:
+      summary: Set the active baby preference (persisted across sessions).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetActiveBabyRequest" }
+      responses:
+        "204":
+          description: Preference updated.
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404":
+          description: Baby does not exist or is not owned by the caller.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/babies:
+    get:
+      summary: List the caregiver's babies (excludes soft-deleted).
+      responses:
+        "200":
+          description: List of babies.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Baby" }
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    post:
+      summary: Create a new baby profile owned by the caller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BabyCreate" }
+      responses:
+        "201":
+          description: Created. If this is the caregiver's first baby, the server also sets `users.active_baby_id` to the new baby.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Baby" }
+        "400":
+          description: Validation failure.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /v1/babies/{baby_id}:
+    parameters:
+      - name: baby_id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      summary: Update an owned baby profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BabyUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Baby" }
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404":
+          description: Baby does not exist or is not owned by the caller.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    delete:
+      summary: Soft-delete an owned baby profile.
+      responses:
+        "204":
+          description: Deleted. If this was the active baby, the server clears or reassigns `users.active_baby_id` per FR-011.
+        "401":
+          description: Not signed in.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404":
+          description: Baby does not exist or is not owned by the caller.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

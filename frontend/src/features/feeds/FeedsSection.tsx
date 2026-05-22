@@ -22,7 +22,7 @@ export function FeedsSection(): JSX.Element {
       onRetry={() => q.refetch()}
     >
       {items.map((entry) => (
-        <FeedItem key={entry.id} entry={entry} />
+        <FeedItem key={entry.id} entry={entry} date={date} />
       ))}
     </SectionShell>
   );

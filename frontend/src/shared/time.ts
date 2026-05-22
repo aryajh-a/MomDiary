@@ -31,3 +31,24 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
   if (Number.isNaN(d.getTime())) return "";
   return formatDistanceStrict(d, now, { addSuffix: true });
 }
+
+/** Convert an ISO-8601 timestamp into the value expected by
+ *  `<input type="datetime-local">`: "YYYY-MM-DDTHH:mm" in local browser time. */
+export function toDatetimeLocalInputValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+/** Convert a `<input type="datetime-local">` value back to an ISO-8601
+ *  string with an explicit offset (uses local browser time + UTC `Z`). */
+export function fromDatetimeLocalInputValue(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}

@@ -8,6 +8,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from momdiary.auth.context import get_active_baby_id, require_active_baby_id
 from momdiary.models.orm import Appointment, AppointmentNote
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
@@ -50,6 +51,7 @@ class AppointmentsRepository:
         if note is not None:
             _validate_note(note)
         row = Appointment(
+            baby_id=require_active_baby_id(),
             scheduled_at=scheduled_at,
             created_at=_now_iso(),
             updated_at=_now_iso(),
@@ -74,11 +76,15 @@ class AppointmentsRepository:
     async def get_by_id_with_notes(
         self, entry_id: int, *, include_deleted: bool = False
     ) -> Appointment | None:
-        result = await self._session.execute(
+        stmt = (
             select(Appointment)
             .options(selectinload(Appointment.notes))
             .where(Appointment.id == entry_id)
         )
+        baby_id = get_active_baby_id()
+        if baby_id is not None:
+            stmt = stmt.where(Appointment.baby_id == baby_id)
+        result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -89,11 +95,13 @@ class AppointmentsRepository:
     async def list_by_date(self, d: date) -> list[Appointment]:
         tz = await get_default_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
+        baby_id = require_active_baby_id()
         result = await self._session.execute(
             select(Appointment)
             .options(selectinload(Appointment.notes))
             .where(
                 and_(
+                    Appointment.baby_id == baby_id,
                     Appointment.deleted_at.is_(None),
                     Appointment.scheduled_at >= to_iso(start),
                     Appointment.scheduled_at < to_iso(end),

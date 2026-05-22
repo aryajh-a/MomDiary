@@ -22,7 +22,7 @@ export function SleepsSection(): JSX.Element {
       onRetry={() => q.refetch()}
     >
       {items.map((entry) => (
-        <SleepItem key={entry.id} entry={entry} />
+        <SleepItem key={entry.id} entry={entry} date={date} />
       ))}
     </SectionShell>
   );

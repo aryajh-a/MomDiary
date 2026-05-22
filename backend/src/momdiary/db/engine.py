@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -20,6 +21,29 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def _install_sqlite_pragmas(engine: AsyncEngine) -> None:
+    """WAL + busy_timeout + FK enforcement on every aiosqlite connection.
+
+    Without these, a single concurrent writer (e.g. the per-request
+    `user_sessions` slide) raises `database is locked` immediately because
+    SQLite's default `journal_mode=DELETE` serialises everything and the
+    default `busy_timeout` is 0.
+    """
+    if not engine.url.drivername.startswith("sqlite"):
+        return
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _):  # type: ignore[no-untyped-def]
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.execute("PRAGMA busy_timeout=10000")  # 10s
+            cur.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cur.close()
+
+
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
@@ -29,7 +53,9 @@ def get_engine() -> AsyncEngine:
             settings.momdiary_db_url,
             future=True,
             echo=False,
+            connect_args={"timeout": 30},  # sqlite3.connect busy timeout (s)
         )
+        _install_sqlite_pragmas(_engine)
     return _engine
 
 

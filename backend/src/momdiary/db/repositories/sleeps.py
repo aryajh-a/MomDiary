@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from momdiary.auth.context import get_active_baby_id, require_active_baby_id
 from momdiary.models.orm import Sleep
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
@@ -44,6 +45,7 @@ class SleepsRepository:
     async def create(self, *, start_at: str, end_at: str) -> Sleep:
         _validate(start_at, end_at)
         row = Sleep(
+            baby_id=require_active_baby_id(),
             start_at=start_at,
             end_at=end_at,
             created_at=_now_iso(),
@@ -55,7 +57,11 @@ class SleepsRepository:
         return row
 
     async def get_by_id(self, entry_id: int, *, include_deleted: bool = False) -> Sleep | None:
-        result = await self._session.execute(select(Sleep).where(Sleep.id == entry_id))
+        stmt = select(Sleep).where(Sleep.id == entry_id)
+        baby_id = get_active_baby_id()
+        if baby_id is not None:
+            stmt = stmt.where(Sleep.baby_id == baby_id)
+        result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -67,10 +73,12 @@ class SleepsRepository:
         """FR-009: assign session to its start_at local date."""
         tz = await get_default_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
+        baby_id = require_active_baby_id()
         result = await self._session.execute(
             select(Sleep)
             .where(
                 and_(
+                    Sleep.baby_id == baby_id,
                     Sleep.deleted_at.is_(None),
                     Sleep.start_at >= to_iso(start),
                     Sleep.start_at < to_iso(end),

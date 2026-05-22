@@ -136,3 +136,33 @@ class PoopListResponse(_StrictModel):
 class AppointmentListResponse(_StrictModel):
     date: str
     items: list[AppointmentEntry]
+
+
+# ---------------------------------------------------------------------------
+# Direct PATCH bodies (feature 006 — edit/delete per entry from the UI)
+# ---------------------------------------------------------------------------
+
+
+class FeedUpdate(_StrictModel):
+    feed_type: FeedType | None = None
+    quantity: Annotated[float, Field(gt=0)] | None = None
+    unit: FeedUnit | None = None
+    occurred_at: datetime | None = None
+
+
+class SleepUpdate(_StrictModel):
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+
+class PoopUpdate(_StrictModel):
+    occurred_at: datetime | None = None
+    consistency: PoopConsistency | None = None
+
+
+class AppointmentUpdate(_StrictModel):
+    scheduled_at: datetime | None = None
+
+
+class AppointmentNoteCreate(_StrictModel):
+    body: Annotated[str, Field(min_length=1, max_length=2000)]

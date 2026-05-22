@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from momdiary.auth.context import get_active_baby_id, require_active_baby_id
 from momdiary.models.orm import Feed
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
@@ -52,6 +53,7 @@ class FeedsRepository:
     ) -> Feed:
         _validate(feed_type, quantity, unit, occurred_at)
         row = Feed(
+            baby_id=require_active_baby_id(),
             feed_type=feed_type,
             quantity=quantity,
             unit=unit,
@@ -71,7 +73,11 @@ class FeedsRepository:
         return row
 
     async def get_by_id(self, entry_id: int, *, include_deleted: bool = False) -> Feed | None:
-        result = await self._session.execute(select(Feed).where(Feed.id == entry_id))
+        stmt = select(Feed).where(Feed.id == entry_id)
+        baby_id = get_active_baby_id()
+        if baby_id is not None:
+            stmt = stmt.where(Feed.baby_id == baby_id)
+        result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -82,10 +88,12 @@ class FeedsRepository:
     async def list_by_date(self, d: date) -> list[Feed]:
         tz = await get_default_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
+        baby_id = require_active_baby_id()
         result = await self._session.execute(
             select(Feed)
             .where(
                 and_(
+                    Feed.baby_id == baby_id,
                     Feed.deleted_at.is_(None),
                     Feed.occurred_at >= to_iso(start),
                     Feed.occurred_at < to_iso(end),

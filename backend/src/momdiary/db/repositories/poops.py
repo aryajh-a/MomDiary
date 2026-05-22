@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from momdiary.auth.context import get_active_baby_id, require_active_baby_id
 from momdiary.models.orm import Poop
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
@@ -42,6 +43,7 @@ class PoopsRepository:
     async def create(self, *, occurred_at: str, consistency: str) -> Poop:
         _validate(occurred_at, consistency)
         row = Poop(
+            baby_id=require_active_baby_id(),
             occurred_at=occurred_at,
             consistency=consistency,
             created_at=_now_iso(),
@@ -53,7 +55,11 @@ class PoopsRepository:
         return row
 
     async def get_by_id(self, entry_id: int, *, include_deleted: bool = False) -> Poop | None:
-        result = await self._session.execute(select(Poop).where(Poop.id == entry_id))
+        stmt = select(Poop).where(Poop.id == entry_id)
+        baby_id = get_active_baby_id()
+        if baby_id is not None:
+            stmt = stmt.where(Poop.baby_id == baby_id)
+        result = await self._session.execute(stmt)
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -64,10 +70,12 @@ class PoopsRepository:
     async def list_by_date(self, d: date) -> list[Poop]:
         tz = await get_default_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
+        baby_id = require_active_baby_id()
         result = await self._session.execute(
             select(Poop)
             .where(
                 and_(
+                    Poop.baby_id == baby_id,
                     Poop.deleted_at.is_(None),
                     Poop.occurred_at >= to_iso(start),
                     Poop.occurred_at < to_iso(end),

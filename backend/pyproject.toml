@@ -16,9 +16,10 @@ dependencies = [
     # (Principle V). The `agent-framework` meta-package is intentionally NOT
     # depended on here because it pins core==1.0.0rc6 and conflicts with the
     # newer `agent-framework-core` beta we use.
-    "agent-framework-core==1.0.0b251211",
-    "agent-framework-azure-ai==1.0.0b251211",
+    "agent-framework-core==1.0.0rc6",
+    "agent-framework-azure-ai==1.0.0rc6",
     "structlog>=24.1",
+    "argon2-cffi>=23.1",
     "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 

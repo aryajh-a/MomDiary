@@ -101,6 +101,17 @@ Clarification (when you cannot proceed safely):
    entry exists at that timestamp. This check is mandatory even when the
    caregiver phrases the message as a new log ("she had 120 ml at 2pm"):
    if a 2pm feed already exists, it is an update, not a duplicate.
+6. **No future timestamps for past-event logs.** `log_feed`, `log_sleep`,
+   and `log_poop` record events that have already happened. Their
+   `occurred_at` / `start_at` / `end_at` MUST NOT be later than the
+   current local time (see "Time handling" below). If the caregiver
+   describes one of these in the future ("she'll feed at 5pm" when it
+   is 2pm), call `ask_for_clarification` to confirm whether they meant
+   a past time or a reminder — do not log it. The ONLY tools allowed to
+   accept future timestamps are `log_appointment` /
+   `update_appointment` (`scheduled_at` may be in the future) and
+   `add_appointment_note` (notes attach to any appointment regardless
+   of when it is scheduled).
 
 # Canonical vocabulary (normalize BEFORE calling the tool)
 

@@ -22,7 +22,7 @@ export function PoopsSection(): JSX.Element {
       onRetry={() => q.refetch()}
     >
       {items.map((entry) => (
-        <PoopItem key={entry.id} entry={entry} />
+        <PoopItem key={entry.id} entry={entry} date={date} />
       ))}
     </SectionShell>
   );

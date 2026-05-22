@@ -22,7 +22,7 @@ export function AppointmentsSection(): JSX.Element {
       onRetry={() => q.refetch()}
     >
       {items.map((entry) => (
-        <AppointmentItem key={entry.id} entry={entry} />
+        <AppointmentItem key={entry.id} entry={entry} date={date} />
       ))}
     </SectionShell>
   );

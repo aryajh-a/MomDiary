@@ -84,6 +84,41 @@ export type PoopListResponse = z.infer<typeof poopListResponseSchema>;
 export const appointmentListResponseSchema = listResponse(appointmentEntrySchema);
 export type AppointmentListResponse = z.infer<typeof appointmentListResponseSchema>;
 
+// ---------- Direct PATCH bodies (per-entry edit) ----------
+
+export const feedUpdateSchema = z
+  .object({
+    feed_type: feedTypeSchema.optional(),
+    quantity: z.number().positive().optional(),
+    unit: feedUnitSchema.optional(),
+    occurred_at: isoString.optional(),
+  })
+  .strict();
+export type FeedUpdate = z.infer<typeof feedUpdateSchema>;
+
+export const sleepUpdateSchema = z
+  .object({
+    start_at: isoString.optional(),
+    end_at: isoString.optional(),
+  })
+  .strict();
+export type SleepUpdate = z.infer<typeof sleepUpdateSchema>;
+
+export const poopUpdateSchema = z
+  .object({
+    occurred_at: isoString.optional(),
+    consistency: poopConsistencySchema.optional(),
+  })
+  .strict();
+export type PoopUpdate = z.infer<typeof poopUpdateSchema>;
+
+export const appointmentUpdateSchema = z
+  .object({
+    scheduled_at: isoString.optional(),
+  })
+  .strict();
+export type AppointmentUpdate = z.infer<typeof appointmentUpdateSchema>;
+
 // ---------- Agent write envelope ----------
 
 export const agentWriteRequestSchema = z.object({
@@ -167,3 +202,76 @@ export const errorBodySchema = z.object({
   correlation_id: correlationId,
 });
 export type ErrorBody = z.infer<typeof errorBodySchema>;
+
+// ---------- Auth & profiles (feature 006) ----------
+
+export const okResponseSchema = z.object({ ok: z.literal(true) });
+
+const emailSchema = z.string().email().max(254);
+const passwordSchema = z.string().min(12).max(128);
+const displayNameSchema = z.string().min(1).max(80);
+const colorTagSchema = z.string().max(16);
+const dateOfBirth = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const userPublicSchema = z.object({
+  id: z.number().int().positive(),
+  email: emailSchema,
+  display_name: displayNameSchema,
+  active_baby_id: z.number().int().positive().nullable(),
+});
+export type UserPublic = z.infer<typeof userPublicSchema>;
+
+export const authMeSchema = z.object({ user: userPublicSchema });
+
+export const registerRequestSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  display_name: displayNameSchema,
+});
+export type RegisterRequest = z.infer<typeof registerRequestSchema>;
+
+export const loginRequestSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+export const userUpdateSchema = z.object({
+  display_name: displayNameSchema,
+});
+export type UserUpdate = z.infer<typeof userUpdateSchema>;
+
+export const setActiveBabyRequestSchema = z.object({
+  baby_id: z.number().int().positive(),
+});
+export type SetActiveBabyRequest = z.infer<typeof setActiveBabyRequestSchema>;
+
+export const babySchema = z.object({
+  id: z.number().int().positive(),
+  owner_user_id: z.number().int().positive(),
+  display_name: displayNameSchema,
+  date_of_birth: dateOfBirth,
+  color_tag: colorTagSchema.nullable(),
+  created_at: isoString,
+  updated_at: isoString,
+});
+export type Baby = z.infer<typeof babySchema>;
+
+export const babyListResponseSchema = z.object({
+  items: z.array(babySchema),
+});
+export type BabyListResponse = z.infer<typeof babyListResponseSchema>;
+
+export const babyCreateSchema = z.object({
+  display_name: displayNameSchema,
+  date_of_birth: dateOfBirth,
+  color_tag: colorTagSchema.optional(),
+});
+export type BabyCreate = z.infer<typeof babyCreateSchema>;
+
+export const babyUpdateSchema = z.object({
+  display_name: displayNameSchema.optional(),
+  date_of_birth: dateOfBirth.optional(),
+  color_tag: colorTagSchema.optional(),
+});
+export type BabyUpdate = z.infer<typeof babyUpdateSchema>;

@@ -6,7 +6,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 
 from momdiary.config import get_settings
 from momdiary.db.engine import dispose_engine
@@ -38,23 +41,54 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
-        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["X-Session-ID", "X-Correlation-ID"],
-        allow_credentials=False,
+        allow_credentials=True,
     )
+    from momdiary.auth.middleware import (
+        AuthLogContextMiddleware,
+        OriginCsrfMiddleware,
+    )
+
+    app.add_middleware(AuthLogContextMiddleware)
+    app.add_middleware(OriginCsrfMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
+
+    @app.exception_handler(FastAPIHTTPException)
+    async def _envelope_http_exception_handler(
+        request: Request, exc: FastAPIHTTPException
+    ) -> JSONResponse:
+        """Render `HTTPException(detail={"error":..., ...})` as a bare envelope."""
+        if isinstance(exc.detail, dict) and "error" in exc.detail:
+            return JSONResponse(status_code=exc.status_code, content=exc.detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": "http_error", "message": str(exc.detail)},
+        )
 
     # Routers are registered lazily by their respective phases to keep this
     # module a stable composition root.
-    from momdiary.api import appointments, entries, feeds, poops, sleeps
+    from momdiary.api import (
+        appointments,
+        auth,
+        babies,
+        entries,
+        feeds,
+        poops,
+        sleeps,
+        users,
+    )
 
+    app.include_router(auth.router, prefix="/v1")
+    app.include_router(users.router, prefix="/v1")
+    app.include_router(babies.router, prefix="/v1")
     app.include_router(entries.router, prefix="/v1")
     app.include_router(feeds.router, prefix="/v1")
     app.include_router(sleeps.router, prefix="/v1")
     app.include_router(poops.router, prefix="/v1")
     app.include_router(appointments.router, prefix="/v1")
-    logger.info("app.routers_registered", count=5)
+    logger.info("app.routers_registered", count=8)
     return app
 
 

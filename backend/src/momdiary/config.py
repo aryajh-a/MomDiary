@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # Conservative under the gpt-4.1 16K context window.
     momdiary_session_prompt_token_budget: int = Field(default=12_000)
 
+    # Auth / cookie settings (feature 006).
+    momdiary_session_cookie_name: str = Field(default="momdiary_session")
+    momdiary_session_cookie_ttl_days: int = Field(default=30)
+    # Set False in dev when serving over plain http.
+    momdiary_session_cookie_secure: bool = Field(default=False)
+    momdiary_session_cookie_samesite: Literal["lax", "strict", "none"] = Field(
+        default="lax"
+    )
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.momdiary_allowed_origins.split(",") if origin.strip()]

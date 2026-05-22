@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from momdiary.auth.context import require_active_baby_id
 from momdiary.models.orm import AgentInteraction
 
 
@@ -28,6 +29,7 @@ class AgentInteractionsRepository:
 
     async def insert(self, record: AgentInteractionRecord) -> AgentInteraction:
         row = AgentInteraction(
+            baby_id=require_active_baby_id(),
             correlation_id=record.correlation_id,
             inbound_message=record.inbound_message,
             selected_tool=record.selected_tool,

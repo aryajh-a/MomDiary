@@ -1,19 +1,46 @@
 import {
   type AgentWriteRequest,
   type AgentWriteResponse,
+  type AppointmentEntry,
   type AppointmentListResponse,
+  type AppointmentUpdate,
+  type Baby,
+  type BabyCreate,
+  type BabyListResponse,
+  type BabyUpdate,
+  type FeedEntry,
   type FeedListResponse,
+  type FeedUpdate,
+  type LoginRequest,
+  type PoopEntry,
   type PoopListResponse,
+  type PoopUpdate,
+  type RegisterRequest,
+  type SetActiveBabyRequest,
+  type SleepEntry,
   type SleepListResponse,
+  type SleepUpdate,
+  type UserPublic,
+  type UserUpdate,
   agentWriteResponseSchema,
+  appointmentEntrySchema,
   appointmentListResponseSchema,
+  authMeSchema,
+  babyListResponseSchema,
+  babySchema,
   errorBodySchema,
+  feedEntrySchema,
   feedListResponseSchema,
+  okResponseSchema,
+  poopEntrySchema,
   poopListResponseSchema,
+  sleepEntrySchema,
   sleepListResponseSchema,
 } from "./types";
 import { isoDate } from "./queryKeys";
-import type { ZodSchema } from "zod";
+import { z, type ZodSchema } from "zod";
+
+const voidSchema = z.undefined();
 
 export class ApiError extends Error {
   readonly status: number;
@@ -56,6 +83,30 @@ export function resetSessionId(): void {
   currentSessionId = null;
 }
 
+// Per-request active baby id sent as X-Active-Baby-Id (research §R7).
+// React state mirrors `users.active_baby_id` and updates this via setter.
+let activeBabyId: number | null = null;
+
+export function getActiveBabyId(): number | null {
+  return activeBabyId;
+}
+
+export function setActiveBabyId(id: number | null): void {
+  if (activeBabyId !== id) {
+    activeBabyId = id;
+    // Switching baby == new conversation thread (research §R6).
+    currentSessionId = null;
+  }
+}
+
+// Subscribed by `useSession` so the app can redirect to /login on auth loss.
+type UnauthorizedListener = () => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+export function onUnauthorized(fn: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(fn);
+  return () => unauthorizedListeners.delete(fn);
+}
+
 async function request<T>(
   path: string,
   init: RequestInit,
@@ -68,10 +119,17 @@ async function request<T>(
   if (currentSessionId && !headers.has("X-Session-ID")) {
     headers.set("X-Session-ID", currentSessionId);
   }
+  if (activeBabyId !== null && !headers.has("X-Active-Baby-Id")) {
+    headers.set("X-Active-Baby-Id", String(activeBabyId));
+  }
 
   let response: Response;
   try {
-    response = await fetch(`${getBaseUrl()}${path}`, { ...init, headers });
+    response = await fetch(`${getBaseUrl()}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
   } catch (cause) {
     throw new ApiError({
       status: 0,
@@ -90,6 +148,15 @@ async function request<T>(
   const json = text ? safeParseJson(text) : undefined;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      for (const fn of unauthorizedListeners) {
+        try {
+          fn();
+        } catch {
+          // listeners must not throw
+        }
+      }
+    }
     if (json) {
       const errBody = errorBodySchema.safeParse(json);
       if (errBody.success) {
@@ -111,6 +178,10 @@ async function request<T>(
 
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
+    // 204 No Content: callers using `voidSchema` accept undefined.
+    if (response.status === 204 && (schema as unknown) === voidSchema) {
+      return undefined as unknown as T;
+    }
     throw new ApiError({
       status: response.status,
       code: "schema_error",
@@ -130,6 +201,63 @@ function safeParseJson(text: string): unknown {
 }
 
 export const apiClient = {
+  // ---- auth (feature 006) ----
+  register: (body: RegisterRequest): Promise<{ user: UserPublic }> =>
+    request(
+      `/v1/auth/register`,
+      { method: "POST", body: JSON.stringify(body) },
+      authMeSchema,
+    ),
+  login: (body: LoginRequest): Promise<{ user: UserPublic }> =>
+    request(
+      `/v1/auth/login`,
+      { method: "POST", body: JSON.stringify(body) },
+      authMeSchema,
+    ),
+  logout: (): Promise<{ ok: true }> =>
+    request(
+      `/v1/auth/logout`,
+      { method: "POST" },
+      okResponseSchema,
+    ),
+  me: (): Promise<{ user: UserPublic }> =>
+    request(`/v1/auth/me`, { method: "GET" }, authMeSchema),
+  updateMe: (body: UserUpdate): Promise<{ user: UserPublic }> =>
+    request(
+      `/v1/users/me`,
+      { method: "PATCH", body: JSON.stringify(body) },
+      authMeSchema,
+    ),
+  setActiveBaby: (body: SetActiveBabyRequest): Promise<{ user: UserPublic }> =>
+    request(
+      `/v1/users/me/active-baby`,
+      { method: "POST", body: JSON.stringify(body) },
+      authMeSchema,
+    ),
+
+  // ---- babies (feature 006) ----
+  listBabies: (): Promise<BabyListResponse> =>
+    request(`/v1/babies`, { method: "GET" }, babyListResponseSchema),
+  createBaby: (body: BabyCreate): Promise<Baby> =>
+    request(
+      `/v1/babies`,
+      { method: "POST", body: JSON.stringify(body) },
+      babySchema,
+    ),
+  updateBaby: (id: number, body: BabyUpdate): Promise<Baby> =>
+    request(
+      `/v1/babies/${id}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+      babySchema,
+    ),
+  deleteBaby: (id: number): Promise<{ ok: true }> =>
+    request(
+      `/v1/babies/${id}`,
+      { method: "DELETE" },
+      okResponseSchema,
+    ),
+
+  // ---- diary (existing) ----
   getFeeds: (date: Date): Promise<FeedListResponse> =>
     request(`/v1/feeds?date=${isoDate(date)}`, { method: "GET" }, feedListResponseSchema),
   getSleeps: (date: Date): Promise<SleepListResponse> =>
@@ -144,6 +272,28 @@ export const apiClient = {
     ),
   postEntry: (body: AgentWriteRequest): Promise<AgentWriteResponse> =>
     request(`/v1/entries`, { method: "POST", body: JSON.stringify(body) }, agentWriteResponseSchema),
+
+  // ---- direct per-entry edit/delete ----
+  updateFeed: (id: number, body: FeedUpdate): Promise<FeedEntry> =>
+    request(`/v1/feeds/${id}`, { method: "PATCH", body: JSON.stringify(body) }, feedEntrySchema),
+  deleteFeed: (id: number): Promise<void> =>
+    request(`/v1/feeds/${id}`, { method: "DELETE" }, voidSchema),
+  updateSleep: (id: number, body: SleepUpdate): Promise<SleepEntry> =>
+    request(`/v1/sleeps/${id}`, { method: "PATCH", body: JSON.stringify(body) }, sleepEntrySchema),
+  deleteSleep: (id: number): Promise<void> =>
+    request(`/v1/sleeps/${id}`, { method: "DELETE" }, voidSchema),
+  updatePoop: (id: number, body: PoopUpdate): Promise<PoopEntry> =>
+    request(`/v1/poops/${id}`, { method: "PATCH", body: JSON.stringify(body) }, poopEntrySchema),
+  deletePoop: (id: number): Promise<void> =>
+    request(`/v1/poops/${id}`, { method: "DELETE" }, voidSchema),
+  updateAppointment: (id: number, body: AppointmentUpdate): Promise<AppointmentEntry> =>
+    request(
+      `/v1/appointments/${id}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+      appointmentEntrySchema,
+    ),
+  deleteAppointment: (id: number): Promise<void> =>
+    request(`/v1/appointments/${id}`, { method: "DELETE" }, voidSchema),
 };
 
 export type ApiClient = typeof apiClient;

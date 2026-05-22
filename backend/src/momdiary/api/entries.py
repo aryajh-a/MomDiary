@@ -20,6 +20,7 @@ from momdiary.api.dependencies import (
     get_dispatcher,
     get_session_store,
 )
+from momdiary.auth.dependencies import ActiveBabyDep, CurrentUserDep
 from momdiary.config import get_settings
 from momdiary.db.engine import get_session
 from momdiary.models.schemas import AgentWriteRequest
@@ -120,6 +121,8 @@ async def create_entry(
     response: Response,
     dispatcher: Annotated[AgentDispatcher, Depends(get_dispatcher)],
     store: Annotated[SessionStore, Depends(get_session_store)],
+    auth: CurrentUserDep,
+    baby: ActiveBabyDep,
     x_session_id: Annotated[str | None, Header(alias="X-Session-ID")] = None,
 ) -> dict:
     """T034 / T035: agent-routed creation; clarification short-circuits to 200."""
@@ -131,8 +134,15 @@ async def create_entry(
         hinted_entry_type=payload.entry_type,
         hinted_entry_id=payload.entry_id,
         session_id_present=x_session_id is not None,
+        user_id=auth.user.id,
+        baby_id=baby.id,
     )
-    chat_session = await store.get_or_create(x_session_id, correlation_id=cid)
+    chat_session = await store.get_or_create(
+        x_session_id,
+        correlation_id=cid,
+        user_id=auth.user.id,
+        baby_id=baby.id,
+    )
     settings = get_settings()
     async with chat_session.lock:
         history = await store.recent_view(
@@ -212,6 +222,8 @@ async def update_or_delete_entry(
     dispatcher: Annotated[AgentDispatcher, Depends(get_dispatcher)],
     session: Annotated[AsyncSession, Depends(get_session)],
     store: Annotated[SessionStore, Depends(get_session_store)],
+    auth: CurrentUserDep,
+    baby: ActiveBabyDep,
     x_session_id: Annotated[str | None, Header(alias="X-Session-ID")] = None,
 ) -> dict:
     """T068: deterministic update path when (entry_id, entry_type) supplied.
@@ -220,7 +232,12 @@ async def update_or_delete_entry(
     body is byte-identical to the previous PUT (FR-015).
     """
     cid = _correlation_id(payload)
-    chat_session = await store.get_or_create(x_session_id, correlation_id=cid)
+    chat_session = await store.get_or_create(
+        x_session_id,
+        correlation_id=cid,
+        user_id=auth.user.id,
+        baby_id=baby.id,
+    )
     settings = get_settings()
 
     async with chat_session.lock:

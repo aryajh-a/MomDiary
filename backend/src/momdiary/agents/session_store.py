@@ -99,9 +99,22 @@ def _estimate_turn_tokens(turn: ChatTurn) -> int:
 # ---------------------------------------------------------------------------
 
 
+# Partition key (feature 006 FR-017): every resident session is tagged with
+# its caller (user_id, baby_id) so caregiver A can never observe or extend
+# caregiver B's chat history — even if A guesses or steals a session id.
+# `user_id=0, baby_id=0` is the legacy anonymous partition retained for
+# unauthenticated test paths; production routes always supply real ids.
+PartitionKey = tuple[int, int, str]
+
+
 class SessionStore(Protocol):
     async def get_or_create(
-        self, session_id: str | None, *, correlation_id: str | None = None
+        self,
+        session_id: str | None,
+        *,
+        correlation_id: str | None = None,
+        user_id: int = 0,
+        baby_id: int = 0,
     ) -> ChatSession: ...
 
     async def append(self, session: ChatSession, turn: ChatTurn) -> None: ...
@@ -140,36 +153,47 @@ class InMemorySessionStore:
         self._max_sessions = max_sessions
         self._message_max_bytes = message_max_bytes
         self._now_fn = now_fn
-        self._sessions: dict[str, ChatSession] = {}
+        # Keyed by (user_id, baby_id, session_id) per feature 006 FR-017.
+        self._sessions: dict[PartitionKey, ChatSession] = {}
         self._store_lock = asyncio.Lock()
 
     # -- public API -----------------------------------------------------
 
     async def get_or_create(
-        self, session_id: str | None, *, correlation_id: str | None = None
+        self,
+        session_id: str | None,
+        *,
+        correlation_id: str | None = None,
+        user_id: int = 0,
+        baby_id: int = 0,
     ) -> ChatSession:
         async with self._store_lock:
             now = self._now_fn()
             # Lazy TTL eviction sweep before any lookup.
             self._sweep_expired_locked(now, correlation_id=correlation_id)
 
-            if session_id and session_id in self._sessions:
-                s = self._sessions[session_id]
-                s.last_activity_at = now
-                return s
+            if session_id is not None:
+                key = (user_id, baby_id, session_id)
+                if key in self._sessions:
+                    s = self._sessions[key]
+                    s.last_activity_at = now
+                    return s
+                # Cross-partition hit (different user_id or baby_id) is
+                # treated as a miss: we mint a new id rather than leak
+                # someone else's history (FR-017).
 
-            # Either no id provided, or unknown / already-swept-expired id.
             new_id = str(uuid.uuid4())
+            new_key = (user_id, baby_id, new_id)
             # Enforce global LRU cap before insertion.
             while len(self._sessions) >= self._max_sessions:
-                victim_id = min(
+                victim_key = min(
                     self._sessions, key=lambda k: self._sessions[k].last_activity_at
                 )
-                del self._sessions[victim_id]
+                del self._sessions[victim_key]
                 logger.info(
                     "session.evicted",
                     reason="lru",
-                    evicted_session_id=victim_id[:8],
+                    evicted_session_id=victim_key[2][:8],
                     correlation_id=correlation_id,
                 )
 
@@ -179,10 +203,12 @@ class InMemorySessionStore:
                 last_activity_at=now,
                 turns=deque(maxlen=self._max_turns * 2),
             )
-            self._sessions[new_id] = s
+            self._sessions[new_key] = s
             logger.info(
                 "session.created",
                 session_id=new_id[:8],
+                user_id=user_id,
+                baby_id=baby_id,
                 correlation_id=correlation_id,
             )
             return s
@@ -235,15 +261,15 @@ class InMemorySessionStore:
     ) -> int:
         cutoff = now - self._ttl
         expired = [
-            sid
-            for sid, s in self._sessions.items()
+            key
+            for key, s in self._sessions.items()
             if s.last_activity_at < cutoff
         ]
-        for sid in expired:
-            del self._sessions[sid]
+        for key in expired:
+            del self._sessions[key]
             logger.info(
                 "session.expired",
-                session_id=sid[:8],
+                session_id=key[2][:8],
                 correlation_id=correlation_id,
             )
         return len(expired)
@@ -253,5 +279,7 @@ class InMemorySessionStore:
     def _resident_count(self) -> int:
         return len(self._sessions)
 
-    def _peek(self, session_id: str) -> ChatSession | None:
-        return self._sessions.get(session_id)
+    def _peek(
+        self, session_id: str, *, user_id: int = 0, baby_id: int = 0
+    ) -> ChatSession | None:
+        return self._sessions.get((user_id, baby_id, session_id))
