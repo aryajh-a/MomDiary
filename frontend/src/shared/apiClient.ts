@@ -3,6 +3,7 @@ import {
   type AgentWriteResponse,
   type AppointmentEntry,
   type AppointmentListResponse,
+  type AppointmentCreate,
   type AppointmentUpdate,
   type Baby,
   type BabyCreate,
@@ -21,6 +22,7 @@ import {
   type SetActiveBabyRequest,
   type SleepEntry,
   type SleepListResponse,
+  type SleepCreate,
   type SleepUpdate,
   type UserPublic,
   type UserUpdate,
@@ -280,6 +282,14 @@ export const apiClient = {
     request(`/v1/feeds`, { method: "POST", body: JSON.stringify(body) }, feedEntrySchema),
   createPoop: (body: PoopCreate): Promise<PoopEntry> =>
     request(`/v1/poops`, { method: "POST", body: JSON.stringify(body) }, poopEntrySchema),
+  createSleep: (body: SleepCreate): Promise<SleepEntry> =>
+    request(`/v1/sleeps`, { method: "POST", body: JSON.stringify(body) }, sleepEntrySchema),
+  createAppointment: (body: AppointmentCreate): Promise<AppointmentEntry> =>
+    request(
+      `/v1/appointments`,
+      { method: "POST", body: JSON.stringify(body) },
+      appointmentEntrySchema,
+    ),
 
   // ---- direct per-entry edit/delete ----
   updateFeed: (id: number, body: FeedUpdate): Promise<FeedEntry> =>

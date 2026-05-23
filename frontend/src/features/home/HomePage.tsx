@@ -32,6 +32,8 @@ interface HomePageProps {
   onOpenChat: () => void;
   onOpenFeedHistory: () => void;
   onOpenPoopHistory: () => void;
+  onOpenSleepHistory: () => void;
+  onOpenAppointmentHistory: () => void;
 }
 
 export function HomePage({
@@ -39,6 +41,8 @@ export function HomePage({
   onOpenChat,
   onOpenFeedHistory,
   onOpenPoopHistory,
+  onOpenSleepHistory,
+  onOpenAppointmentHistory,
 }: HomePageProps): JSX.Element {
   const babies = useBabies();
   const activeBaby = babies.data?.items.find((b) => b.id === activeBabyId);
@@ -74,6 +78,8 @@ export function HomePage({
         onOpenChat={onOpenChat}
         onOpenFeedHistory={onOpenFeedHistory}
         onOpenPoopHistory={onOpenPoopHistory}
+        onOpenSleepHistory={onOpenSleepHistory}
+        onOpenAppointmentHistory={onOpenAppointmentHistory}
         disabled={chat.inFlight}
       />
       <RecentLogs
@@ -211,32 +217,17 @@ interface QuickLogDef {
   message: string;
 }
 
-// `feed` and `poop` are omitted from this list because their tiles navigate
-// into dedicated history pages instead of chatting with the agent.
-const QUICK_LOGS: QuickLogDef[] = [
-  {
-    key: "sleep",
-    label: "Sleep",
-    icon: <MoonIcon className="h-5 w-5" />,
-    bg: "bg-violet-100",
-    fg: "text-violet-600",
-    message: "Log a sleep / nap now.",
-  },
-  {
-    key: "appt",
-    label: "Appt",
-    icon: <StethoscopeIcon className="h-5 w-5" />,
-    bg: "bg-pink-100",
-    fg: "text-pink-600",
-    message: "Add an appointment.",
-  },
-];
+// All quick-log tiles now navigate into dedicated history pages. The chat
+// agent is still reachable via the bottom Chat tab and the "+ More" tile.
+const QUICK_LOGS: QuickLogDef[] = [];
 
 function QuickLogGrid(props: {
   onLog: (message: string) => void;
   onOpenChat: () => void;
   onOpenFeedHistory: () => void;
   onOpenPoopHistory: () => void;
+  onOpenSleepHistory: () => void;
+  onOpenAppointmentHistory: () => void;
   disabled: boolean;
 }): JSX.Element {
   return (
@@ -253,6 +244,15 @@ function QuickLogGrid(props: {
           onClick={props.onOpenFeedHistory}
         />
         <QuickLogTile
+          key="sleep"
+          label="Sleep"
+          icon={<MoonIcon className="h-5 w-5" />}
+          bg="bg-violet-100"
+          fg="text-violet-600"
+          disabled={false}
+          onClick={props.onOpenSleepHistory}
+        />
+        <QuickLogTile
           key="poop"
           label="Poop"
           icon={<PoopIcon className="h-5 w-5" />}
@@ -260,6 +260,15 @@ function QuickLogGrid(props: {
           fg="text-amber-700"
           disabled={false}
           onClick={props.onOpenPoopHistory}
+        />
+        <QuickLogTile
+          key="appt"
+          label="Appt"
+          icon={<StethoscopeIcon className="h-5 w-5" />}
+          bg="bg-pink-100"
+          fg="text-pink-600"
+          disabled={false}
+          onClick={props.onOpenAppointmentHistory}
         />
         {QUICK_LOGS.map((q) => (
           <QuickLogTile

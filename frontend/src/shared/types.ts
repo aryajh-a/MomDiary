@@ -139,6 +139,22 @@ export const poopCreateSchema = z
   .strict();
 export type PoopCreate = z.infer<typeof poopCreateSchema>;
 
+export const sleepCreateSchema = z
+  .object({
+    start_at: isoString,
+    end_at: isoString,
+  })
+  .strict();
+export type SleepCreate = z.infer<typeof sleepCreateSchema>;
+
+export const appointmentCreateSchema = z
+  .object({
+    scheduled_at: isoString,
+    note: z.string().min(1).max(2000).optional(),
+  })
+  .strict();
+export type AppointmentCreate = z.infer<typeof appointmentCreateSchema>;
+
 // ---------- Agent write envelope ----------
 
 export const agentWriteRequestSchema = z.object({

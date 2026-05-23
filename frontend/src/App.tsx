@@ -8,6 +8,8 @@ import { SelectedDateProvider } from "@/features/date/useSelectedDate";
 import { FeedHistoryPage } from "@/features/home/FeedHistoryPage";
 import { HomePage } from "@/features/home/HomePage";
 import { PoopHistoryPage } from "@/features/home/PoopHistoryPage";
+import { SleepHistoryPage } from "@/features/home/SleepHistoryPage";
+import { AppointmentHistoryPage } from "@/features/home/AppointmentHistoryPage";
 
 const CHAT_VISIBLE_STORAGE_KEY = "momdiary.chatVisible";
 
@@ -45,7 +47,9 @@ function AppShell(props: {
   // Drives the in-app "page" the caregiver sees. We deliberately keep this in
   // local state (no router) — the app is currently a single-pane mobile flow
   // and adding react-router for one drill-down would be over-engineering.
-  const [view, setView] = useState<"home" | "feedHistory" | "poopHistory">("home");
+  const [view, setView] = useState<
+    "home" | "feedHistory" | "poopHistory" | "sleepHistory" | "appointmentHistory"
+  >("home");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -70,11 +74,17 @@ function AppShell(props: {
           onOpenChat={showChat}
           onOpenFeedHistory={() => setView("feedHistory")}
           onOpenPoopHistory={() => setView("poopHistory")}
+          onOpenSleepHistory={() => setView("sleepHistory")}
+          onOpenAppointmentHistory={() => setView("appointmentHistory")}
         />
       ) : view === "feedHistory" ? (
         <FeedHistoryPage onBack={() => setView("home")} />
-      ) : (
+      ) : view === "poopHistory" ? (
         <PoopHistoryPage onBack={() => setView("home")} />
+      ) : view === "sleepHistory" ? (
+        <SleepHistoryPage onBack={() => setView("home")} />
+      ) : (
+        <AppointmentHistoryPage onBack={() => setView("home")} />
       )}
 
       {chatVisible ? (
