@@ -43,6 +43,11 @@ function AppShell(props: {
     const stored = window.localStorage.getItem(CHAT_VISIBLE_STORAGE_KEY);
     return stored === "true";
   });
+  // When the caregiver opens the chat via the bottom "Voice" tab the panel
+  // becomes a voice-only experience (no textarea, every utterance is sent to
+  // the research API). We just flag it for one open and ChatPanel consumes
+  // it on mount.
+  const [chatVoiceOnly, setChatVoiceOnly] = useState(false);
 
   // Drives the in-app "page" the caregiver sees. We deliberately keep this in
   // local state (no router) — the app is currently a single-pane mobile flow
@@ -56,8 +61,28 @@ function AppShell(props: {
     window.localStorage.setItem(CHAT_VISIBLE_STORAGE_KEY, String(chatVisible));
   }, [chatVisible]);
 
-  const hideChat = useCallback(() => setChatVisible(false), []);
-  const showChat = useCallback(() => setChatVisible(true), []);
+  // Pre-load the ChatPanel chunk so that opening the chat (especially via
+  // the bottom "Voice" tab, which auto-starts the mic) happens synchronously
+  // and stays within the browser's user-gesture window. Without this the
+  // dynamic import resolves after the click tick, which Chrome treats as
+  // outside the gesture for SpeechRecognition.start() — the mic then never
+  // actually listens.
+  useEffect(() => {
+    void import("@/features/chat/ChatPanel");
+  }, []);
+
+  const hideChat = useCallback(() => {
+    setChatVisible(false);
+    setChatVoiceOnly(false);
+  }, []);
+  const showChat = useCallback(() => {
+    setChatVoiceOnly(false);
+    setChatVisible(true);
+  }, []);
+  const showVoice = useCallback(() => {
+    setChatVoiceOnly(true);
+    setChatVisible(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-amber-50">
@@ -72,6 +97,7 @@ function AppShell(props: {
         <HomePage
           activeBabyId={props.activeBabyId}
           onOpenChat={showChat}
+          onOpenVoice={showVoice}
           onOpenFeedHistory={() => setView("feedHistory")}
           onOpenPoopHistory={() => setView("poopHistory")}
           onOpenSleepHistory={() => setView("sleepHistory")}
@@ -100,7 +126,7 @@ function AppShell(props: {
             className="w-full max-w-md origin-bottom animate-[chatPop_180ms_ease-out]"
           >
             <Suspense fallback={<div className="p-4 text-slate-500 text-sm">Loading chat…</div>}>
-              <ChatPanel onHide={hideChat} />
+              <ChatPanel onHide={hideChat} voiceOnly={chatVoiceOnly} />
             </Suspense>
           </div>
         </div>

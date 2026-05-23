@@ -3,6 +3,13 @@ import { ChatMessageList } from "./ChatMessageList";
 import { useChatContext } from "./ChatContext";
 interface ChatPanelProps {
   onHide?: () => void;
+  /**
+   * When true the panel renders a voice-only experience: speech recognition
+   * auto-starts on mount, there is no textarea, the mode switcher is hidden,
+   * and every utterance is routed to the research API. Wired to the bottom
+   * "Voice" tab.
+   */
+  voiceOnly?: boolean;
 }
 
 // -----------------------------------------------------------------------------
@@ -245,14 +252,26 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
 
 // -----------------------------------------------------------------------------
 
-export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
+export function ChatPanel({ onHide, voiceOnly = false }: ChatPanelProps = {}): JSX.Element {
   const { messages, inFlight, draft, setDraft, submit } = useChatContext();
   const autoSend = true;
   const [voiceMode, setVoiceMode] = useState(false);
   // Diary submissions go to /v1/entries (the existing agent dispatcher);
   // research submissions go to the placeholder /v1/research stub. See
   // `useChat.submit` for the routing.
-  const [mode, setMode] = useState<ChatMode>("diary");
+  // Persist mode across panel mount/unmount. Both the Chat tab and the
+  // Voice tab share the same mode setting — the caregiver can voice-log
+  // ("Diary") or voice-ask research questions, and the UI's research
+  // disclaimer + API endpoint pick up the choice in either tab.
+  const [mode, setMode] = useState<ChatMode>(() => {
+    if (typeof window === "undefined") return "diary";
+    const stored = window.localStorage.getItem("momdiary.chatMode");
+    return stored === "research" || stored === "diary" ? stored : "diary";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("momdiary.chatMode", mode);
+  }, [mode]);
   const modeCfg = MODE_CONFIG[mode];
 
   // Per-mode history isolation. The underlying chat store keeps a single
@@ -323,7 +342,7 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
     [autoSend, submitInMode],
   );
 
-  const { supported, listening, error: micError, start, stop } =
+  const { listening, error: micError, start, stop } =
     useSpeechRecognition({
       onTranscript: handleTranscript,
       onFinal: handleFinal,
@@ -336,9 +355,21 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
   }, [inFlight, listening, stop]);
 
   // When recognition ends (final transcript or stop()), close the voice view.
+  // Guard with `hasListenedRef` so we don't immediately close in the gap
+  // between `setVoiceMode(true)` and `setListening(true)` — or, importantly,
+  // when `rec.start()` failed outright (e.g. permission denied) and listening
+  // never flipped on. In that case we leave the overlay open so the user can
+  // see the error message inside it and cancel manually.
+  const hasListenedRef = useRef(false);
   useEffect(() => {
-    if (voiceMode && !listening) {
-      const t = setTimeout(() => setVoiceMode(false), 250);
+    if (listening) hasListenedRef.current = true;
+  }, [listening]);
+  useEffect(() => {
+    if (voiceMode && !listening && hasListenedRef.current) {
+      const t = setTimeout(() => {
+        setVoiceMode(false);
+        hasListenedRef.current = false;
+      }, 250);
       return () => clearTimeout(t);
     }
     return undefined;
@@ -350,6 +381,18 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
     setVoiceMode(true);
     start();
   }, [inFlight, setDraft, start]);
+
+  // Auto-start voice when the panel was opened via the bottom "Voice" tab.
+  // Runs once on mount; if the browser doesn't support speech recognition
+  // the call is a harmless no-op (the overlay simply shows the unsupported
+  // state and the user can switch to typing).
+  const didAutoStartVoiceRef = useRef(false);
+  useEffect(() => {
+    if (didAutoStartVoiceRef.current) return;
+    if (!voiceOnly) return;
+    didAutoStartVoiceRef.current = true;
+    enterVoiceMode();
+  }, [voiceOnly, enterVoiceMode]);
 
   const cancelVoiceMode = useCallback(() => {
     stop();
@@ -400,7 +443,8 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
         </div>
       </header>
 
-      {/* Mode switcher */}
+      {/* Mode switcher — visible in both Chat and Voice tabs so the
+          caregiver can pick Diary vs Research either way. */}
       <div className="flex gap-1.5 border-b border-orange-100 bg-orange-50 px-3 py-2">
         {(Object.keys(MODE_CONFIG) as ChatMode[]).map((m) => {
           const cfg = MODE_CONFIG[m];
@@ -425,7 +469,40 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
         })}
       </div>
 
-      {voiceMode ? (
+      {voiceOnly ? (
+        <>
+          {/* Voice-only experience: history above, voice control below. No
+              textarea — every utterance is routed through the currently
+              selected mode (Diary → /v1/entries, Research → /v1/research). */}
+          <ChatMessageList messages={visibleMessages} inFlight={inFlightHere} />
+
+          {micError ? (
+            <div className="border-orange-100 border-t bg-orange-50 px-3 py-1">
+              <p className="text-[11px] text-amber-700" role="alert">
+                Mic: {micError}
+              </p>
+            </div>
+          ) : null}
+
+          {mode === "research" ? (
+            <div className="flex items-start gap-2 border-orange-100 border-t bg-amber-50 px-3 py-1.5">
+              <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <p className="text-[11px] text-amber-800">
+                General info from the web — not medical advice.
+              </p>
+            </div>
+          ) : null}
+
+          <VoiceControlBar
+            voiceMode={voiceMode}
+            listening={listening}
+            transcript={draft}
+            inFlight={inFlight}
+            onStart={enterVoiceMode}
+            onCancel={cancelVoiceMode}
+          />
+        </>
+      ) : voiceMode ? (
         <VoiceOverlay
           transcript={draft}
           listening={listening}
@@ -437,15 +514,6 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
         <>
           {/* Scrollable messages */}
           <ChatMessageList messages={visibleMessages} inFlight={inFlightHere} />
-
-          {/* Mic error banner */}
-          {micError ? (
-            <div className="border-orange-100 border-t bg-orange-50 px-3 py-1">
-              <p className="text-[11px] text-amber-700" role="alert">
-                Mic: {micError}
-              </p>
-            </div>
-          ) : null}
 
           {/* Quick reply chips */}
           <div className="flex flex-wrap gap-2 border-orange-100 border-t bg-orange-50 px-3 py-2">
@@ -472,23 +540,11 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
             </div>
           ) : null}
 
-          {/* Input row */}
+          {/* Text composer — Chat tab is type-only; voice has its own tab. */}
           <form
             onSubmit={onSubmit}
             className="flex items-center gap-2 border-orange-100 border-t bg-orange-50 px-3 py-3"
           >
-            {supported ? (
-              <button
-                type="button"
-                onClick={enterVoiceMode}
-                disabled={inFlight}
-                aria-label="Start voice input"
-                title="Start voice input"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-500 text-white transition-colors hover:bg-orange-600 disabled:bg-orange-300"
-              >
-                <MicIcon className="h-5 w-5" />
-              </button>
-            ) : null}
             <textarea
               aria-label="Message"
               value={draft}
@@ -587,6 +643,71 @@ function VoiceOverlay({
       >
         Tap to cancel
       </button>
+    </div>
+  );
+}
+
+// Compact bottom voice control used in the voice-only experience. Shows a
+// listening pill while the mic is active and a big "Tap to talk" mic button
+// otherwise. Lets the message history above stay visible at all times.
+function VoiceControlBar({
+  voiceMode,
+  listening,
+  transcript,
+  inFlight,
+  onStart,
+  onCancel,
+}: {
+  voiceMode: boolean;
+  listening: boolean;
+  transcript: string;
+  inFlight: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+}): JSX.Element {
+  const isListening = voiceMode || listening;
+  if (isListening) {
+    return (
+      <div className="flex flex-col items-center gap-2 border-orange-100 border-t bg-orange-50 px-3 py-4">
+        <div className="flex items-center gap-2">
+          <span className="relative grid h-12 w-12 place-items-center rounded-full bg-orange-600 text-white shadow">
+            <span
+              aria-hidden="true"
+              className="absolute inline-flex h-full w-full rounded-full bg-orange-300/50 motion-safe:animate-ping"
+            />
+            <MicIcon className="relative h-5 w-5" />
+          </span>
+          <span className="text-[11px] font-medium text-orange-700">Listening…</span>
+        </div>
+        {transcript ? (
+          <p className="line-clamp-2 max-w-[260px] text-center text-[12px] text-slate-700">
+            “{transcript}”
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-full bg-white px-4 py-1.5 text-[12px] font-medium text-orange-700 ring-1 ring-orange-200 hover:bg-orange-100"
+        >
+          Tap to cancel
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1.5 border-orange-100 border-t bg-orange-50 px-3 py-4">
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={inFlight}
+        aria-label="Tap to talk"
+        className="grid h-16 w-16 place-items-center rounded-full bg-orange-500 text-white shadow-lg transition-colors hover:bg-orange-600 disabled:bg-orange-300"
+      >
+        <MicIcon className="h-7 w-7" />
+      </button>
+      <span className="text-[11px] text-slate-600">
+        {inFlight ? "Thinking…" : "Tap to talk"}
+      </span>
     </div>
   );
 }

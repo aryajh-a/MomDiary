@@ -36,6 +36,7 @@ import type {
 interface HomePageProps {
   activeBabyId: number;
   onOpenChat: () => void;
+  onOpenVoice: () => void;
   onOpenFeedHistory: () => void;
   onOpenPoopHistory: () => void;
   onOpenSleepHistory: () => void;
@@ -45,6 +46,7 @@ interface HomePageProps {
 export function HomePage({
   activeBabyId,
   onOpenChat,
+  onOpenVoice,
   onOpenFeedHistory,
   onOpenPoopHistory,
   onOpenSleepHistory,
@@ -90,7 +92,7 @@ export function HomePage({
         appointments={appts.data?.items ?? []}
         loading={feeds.isLoading || sleeps.isLoading || poops.isLoading || appts.isLoading}
       />
-      <BottomTabBar onOpenChat={onOpenChat} />
+      <BottomTabBar onOpenChat={onOpenChat} onOpenVoice={onOpenVoice} />
     </main>
   );
 }
@@ -423,7 +425,13 @@ function RecentLogs(props: {
 // Bottom tab bar (visual only — Home active; other tabs are placeholders)
 // -----------------------------------------------------------------------------
 
-function BottomTabBar({ onOpenChat }: { onOpenChat: () => void }): JSX.Element {
+function BottomTabBar({
+  onOpenChat,
+  onOpenVoice,
+}: {
+  onOpenChat: () => void;
+  onOpenVoice: () => void;
+}): JSX.Element {
   return (
     <nav
       aria-label="Primary"
@@ -431,8 +439,8 @@ function BottomTabBar({ onOpenChat }: { onOpenChat: () => void }): JSX.Element {
     >
       <TabButton label="Home" active icon={<HomeIcon className="h-5 w-5" />} />
       <TabButton label="Insights" icon={<ChartIcon className="h-5 w-5" />} />
-      <TabButton label="Chat" onClick={onOpenChat} icon={<ChatIcon className="h-7 w-7" />} />
-      <TabButton label="Calendar" icon={<CalendarIcon className="h-5 w-5" />} />
+      <TabButton label="Chat" onClick={onOpenChat} icon={<ChatBubbleIcon className="h-6 w-6" />} />
+      <TabButton label="Voice" onClick={onOpenVoice} icon={<ChatIcon className="h-7 w-7" />} />
       <TabButton label="Profile" icon={<UserIcon className="h-5 w-5" />} />
     </nav>
   );
@@ -548,11 +556,31 @@ function ChartIcon({ className }: IconProps): JSX.Element {
   );
 }
 
-function CalendarIcon({ className }: IconProps): JSX.Element {
+function ChatBubbleIcon({ className }: IconProps): JSX.Element {
+  // Filled gradient speech bubble with a smile — mirrors the gradient mic on
+  // the Voice tab so both AI entry points read as warm primary actions.
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M16 3v4M8 3v4M3 10h18" />
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="chatTabBubbleGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fb923c" />
+          <stop offset="100%" stopColor="#f43f5e" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1121 12z"
+        fill="url(#chatTabBubbleGrad)"
+        stroke="#fff"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 12.5a3 3 0 005 0"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -567,8 +595,8 @@ function UserIcon({ className }: IconProps): JSX.Element {
 }
 
 function ChatIcon({ className }: IconProps): JSX.Element {
-  // Filled gradient bubble with a little smile + sparkle so the Chat tab pops
-  // against the otherwise outline-only tab bar icons.
+  // Filled gradient mic so the Chat tab pops against the otherwise
+  // outline-only tab bar icons. (Voice-first entry point into the chat.)
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <defs>
@@ -577,23 +605,33 @@ function ChatIcon({ className }: IconProps): JSX.Element {
           <stop offset="100%" stopColor="#f43f5e" />
         </linearGradient>
       </defs>
-      <path
-        d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1121 12z"
+      {/* mic capsule */}
+      <rect
+        x="9"
+        y="3"
+        width="6"
+        height="11"
+        rx="3"
         fill="url(#chatBubbleGrad)"
         stroke="#fff"
         strokeWidth="1.25"
-        strokeLinejoin="round"
       />
-      {/* tiny smile */}
+      {/* stand arc */}
       <path
-        d="M9.5 12.5a3 3 0 005 0"
+        d="M6 11a6 6 0 0012 0"
         fill="none"
-        stroke="#fff"
-        strokeWidth="1.5"
+        stroke="url(#chatBubbleGrad)"
+        strokeWidth="1.75"
         strokeLinecap="round"
       />
-      {/* sparkle */}
-      <circle cx="17.5" cy="6.5" r="1.4" fill="#fde68a" stroke="#fff" strokeWidth="0.6" />
+      {/* stem + base */}
+      <path
+        d="M12 17v3M9.5 20h5"
+        fill="none"
+        stroke="url(#chatBubbleGrad)"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
