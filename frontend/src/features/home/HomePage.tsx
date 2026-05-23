@@ -31,9 +31,15 @@ interface HomePageProps {
   activeBabyId: number;
   onOpenChat: () => void;
   onOpenFeedHistory: () => void;
+  onOpenPoopHistory: () => void;
 }
 
-export function HomePage({ activeBabyId, onOpenChat, onOpenFeedHistory }: HomePageProps): JSX.Element {
+export function HomePage({
+  activeBabyId,
+  onOpenChat,
+  onOpenFeedHistory,
+  onOpenPoopHistory,
+}: HomePageProps): JSX.Element {
   const babies = useBabies();
   const activeBaby = babies.data?.items.find((b) => b.id === activeBabyId);
   const babyName = activeBaby?.display_name ?? "baby";
@@ -67,6 +73,7 @@ export function HomePage({ activeBabyId, onOpenChat, onOpenFeedHistory }: HomePa
         onLog={sendQuickLog}
         onOpenChat={onOpenChat}
         onOpenFeedHistory={onOpenFeedHistory}
+        onOpenPoopHistory={onOpenPoopHistory}
         disabled={chat.inFlight}
       />
       <RecentLogs
@@ -76,7 +83,7 @@ export function HomePage({ activeBabyId, onOpenChat, onOpenFeedHistory }: HomePa
         appointments={appts.data?.items ?? []}
         loading={feeds.isLoading || sleeps.isLoading || poops.isLoading || appts.isLoading}
       />
-      <BottomTabBar />
+      <BottomTabBar onOpenChat={onOpenChat} />
     </main>
   );
 }
@@ -204,8 +211,8 @@ interface QuickLogDef {
   message: string;
 }
 
-// `feed` is omitted from this list because the Feed tile navigates into the
-// dedicated FeedHistoryPage instead of chatting with the agent.
+// `feed` and `poop` are omitted from this list because their tiles navigate
+// into dedicated history pages instead of chatting with the agent.
 const QUICK_LOGS: QuickLogDef[] = [
   {
     key: "sleep",
@@ -214,14 +221,6 @@ const QUICK_LOGS: QuickLogDef[] = [
     bg: "bg-violet-100",
     fg: "text-violet-600",
     message: "Log a sleep / nap now.",
-  },
-  {
-    key: "poop",
-    label: "Poop",
-    icon: <PoopIcon className="h-5 w-5" />,
-    bg: "bg-amber-100",
-    fg: "text-amber-700",
-    message: "Log a poop now.",
   },
   {
     key: "appt",
@@ -237,6 +236,7 @@ function QuickLogGrid(props: {
   onLog: (message: string) => void;
   onOpenChat: () => void;
   onOpenFeedHistory: () => void;
+  onOpenPoopHistory: () => void;
   disabled: boolean;
 }): JSX.Element {
   return (
@@ -251,6 +251,15 @@ function QuickLogGrid(props: {
           fg="text-sky-600"
           disabled={false}
           onClick={props.onOpenFeedHistory}
+        />
+        <QuickLogTile
+          key="poop"
+          label="Poop"
+          icon={<PoopIcon className="h-5 w-5" />}
+          bg="bg-amber-100"
+          fg="text-amber-700"
+          disabled={false}
+          onClick={props.onOpenPoopHistory}
         />
         {QUICK_LOGS.map((q) => (
           <QuickLogTile
@@ -413,7 +422,7 @@ function RecentLogs(props: {
 // Bottom tab bar (visual only — Home active; other tabs are placeholders)
 // -----------------------------------------------------------------------------
 
-function BottomTabBar(): JSX.Element {
+function BottomTabBar({ onOpenChat }: { onOpenChat: () => void }): JSX.Element {
   return (
     <nav
       aria-label="Primary"
@@ -421,13 +430,19 @@ function BottomTabBar(): JSX.Element {
     >
       <TabButton label="Home" active icon={<HomeIcon className="h-5 w-5" />} />
       <TabButton label="Insights" icon={<ChartIcon className="h-5 w-5" />} />
+      <TabButton label="Chat" onClick={onOpenChat} icon={<ChatIcon className="h-5 w-5" />} />
       <TabButton label="Calendar" icon={<CalendarIcon className="h-5 w-5" />} />
       <TabButton label="Profile" icon={<UserIcon className="h-5 w-5" />} />
     </nav>
   );
 }
 
-function TabButton(props: { label: string; icon: JSX.Element; active?: boolean }): JSX.Element {
+function TabButton(props: {
+  label: string;
+  icon: JSX.Element;
+  active?: boolean;
+  onClick?: () => void;
+}): JSX.Element {
   const base =
     "flex flex-1 flex-col items-center gap-0.5 rounded-full py-1.5 text-[11px] font-medium transition";
   const active = "bg-amber-100 text-amber-700";
@@ -435,6 +450,7 @@ function TabButton(props: { label: string; icon: JSX.Element; active?: boolean }
   return (
     <button
       type="button"
+      onClick={props.onClick}
       aria-current={props.active ? "page" : undefined}
       className={`${base} ${props.active ? active : inactive}`}
     >
@@ -587,6 +603,38 @@ function UserIcon({ className }: IconProps): JSX.Element {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0116 0" />
+    </svg>
+  );
+}
+
+function ChatIcon({ className }: IconProps): JSX.Element {
+  // Filled gradient bubble with a little smile + sparkle so the Chat tab pops
+  // against the otherwise outline-only tab bar icons.
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="chatBubbleGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fb923c" />
+          <stop offset="100%" stopColor="#f43f5e" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1121 12z"
+        fill="url(#chatBubbleGrad)"
+        stroke="#fff"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+      {/* tiny smile */}
+      <path
+        d="M9.5 12.5a3 3 0 005 0"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      {/* sparkle */}
+      <circle cx="17.5" cy="6.5" r="1.4" fill="#fde68a" stroke="#fff" strokeWidth="0.6" />
     </svg>
   );
 }

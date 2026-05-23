@@ -15,6 +15,7 @@ import {
   type LoginRequest,
   type PoopEntry,
   type PoopListResponse,
+  type PoopCreate,
   type PoopUpdate,
   type RegisterRequest,
   type SetActiveBabyRequest,
@@ -277,6 +278,8 @@ export const apiClient = {
   // ---- direct per-entry create (quick-log) ----
   createFeed: (body: FeedCreate): Promise<FeedEntry> =>
     request(`/v1/feeds`, { method: "POST", body: JSON.stringify(body) }, feedEntrySchema),
+  createPoop: (body: PoopCreate): Promise<PoopEntry> =>
+    request(`/v1/poops`, { method: "POST", body: JSON.stringify(body) }, poopEntrySchema),
 
   // ---- direct per-entry edit/delete ----
   updateFeed: (id: number, body: FeedUpdate): Promise<FeedEntry> =>

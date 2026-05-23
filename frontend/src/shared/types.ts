@@ -131,6 +131,14 @@ export const feedCreateSchema = z
   .strict();
 export type FeedCreate = z.infer<typeof feedCreateSchema>;
 
+export const poopCreateSchema = z
+  .object({
+    occurred_at: isoString,
+    consistency: poopConsistencySchema,
+  })
+  .strict();
+export type PoopCreate = z.infer<typeof poopCreateSchema>;
+
 // ---------- Agent write envelope ----------
 
 export const agentWriteRequestSchema = z.object({

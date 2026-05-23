@@ -7,6 +7,7 @@ import { ChatProvider } from "@/features/chat/ChatContext";
 import { SelectedDateProvider } from "@/features/date/useSelectedDate";
 import { FeedHistoryPage } from "@/features/home/FeedHistoryPage";
 import { HomePage } from "@/features/home/HomePage";
+import { PoopHistoryPage } from "@/features/home/PoopHistoryPage";
 
 const CHAT_VISIBLE_STORAGE_KEY = "momdiary.chatVisible";
 
@@ -44,7 +45,7 @@ function AppShell(props: {
   // Drives the in-app "page" the caregiver sees. We deliberately keep this in
   // local state (no router) — the app is currently a single-pane mobile flow
   // and adding react-router for one drill-down would be over-engineering.
-  const [view, setView] = useState<"home" | "feedHistory">("home");
+  const [view, setView] = useState<"home" | "feedHistory" | "poopHistory">("home");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -68,31 +69,32 @@ function AppShell(props: {
           activeBabyId={props.activeBabyId}
           onOpenChat={showChat}
           onOpenFeedHistory={() => setView("feedHistory")}
+          onOpenPoopHistory={() => setView("poopHistory")}
         />
-      ) : (
+      ) : view === "feedHistory" ? (
         <FeedHistoryPage onBack={() => setView("home")} />
+      ) : (
+        <PoopHistoryPage onBack={() => setView("home")} />
       )}
 
       {chatVisible ? (
         <div
-          className="fixed right-4 bottom-20 z-30 w-[min(calc(100vw-2rem),26rem)] origin-bottom-right animate-[chatPop_180ms_ease-out]"
           role="dialog"
+          aria-modal="true"
           aria-label="Chat"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 sm:items-center"
+          onClick={hideChat}
         >
-          <Suspense fallback={<div className="p-4 text-slate-500 text-sm">Loading chat…</div>}>
-            <ChatPanel onHide={hideChat} />
-          </Suspense>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md origin-bottom animate-[chatPop_180ms_ease-out]"
+          >
+            <Suspense fallback={<div className="p-4 text-slate-500 text-sm">Loading chat…</div>}>
+              <ChatPanel onHide={hideChat} />
+            </Suspense>
+          </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={showChat}
-          aria-label="Show chat"
-          className="fixed right-4 bottom-20 z-30 grid h-14 w-14 place-items-center rounded-full bg-amber-500 text-2xl text-white shadow-lg ring-4 ring-amber-200 hover:bg-amber-600"
-        >
-          💬
-        </button>
-      )}
+      ) : null}
     </div>
   );
 }
