@@ -4,6 +4,7 @@ import { addDays, format, isSameDay, parseISO, startOfDay } from "date-fns";
 import { usePoops } from "@/features/poops/usePoops";
 import { apiClient } from "@/shared/apiClient";
 import { queryKeys } from "@/shared/queryKeys";
+import { PoopFunIcon } from "@/shared/playfulIcons";
 import type { PoopConsistency, PoopEntry, PoopUpdate } from "@/shared/types";
 
 // -----------------------------------------------------------------------------
@@ -85,7 +86,7 @@ function Header({ onBack }: { onBack: () => void }): JSX.Element {
           <ArrowLeftIcon className="h-5 w-5" />
         </button>
         <span className="grid h-8 w-8 place-items-center rounded-full bg-amber-100 text-amber-700">
-          <DiaperIcon className="h-4 w-4" />
+          <PoopFunIcon className="h-6 w-6" />
         </span>
         <h1 className="text-lg font-semibold text-slate-900">Poop history</h1>
       </div>
@@ -220,7 +221,7 @@ function PoopRow({
         className="flex w-full items-center gap-3 rounded-2xl bg-white px-3 py-3 text-left shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
       >
         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${tone.bg} ${tone.fg}`}>
-          <DiaperIcon className="h-5 w-5" />
+          <PoopFunIcon className="h-7 w-7" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-semibold text-slate-900">
@@ -497,15 +498,6 @@ function CalendarIcon({ className }: IconProps): JSX.Element {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M16 3v4M8 3v4M3 10h18" />
-    </svg>
-  );
-}
-
-function DiaperIcon({ className }: IconProps): JSX.Element {
-  // Simple diaper/triangle silhouette.
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M3 7h18l-2 6a6 6 0 01-5.7 4.2h-2.6A6 6 0 015 13L3 7z" />
     </svg>
   );
 }

@@ -4,6 +4,7 @@ import { addDays, format, isSameDay, parseISO, startOfDay } from "date-fns";
 import { useFeeds } from "@/features/feeds/useFeeds";
 import { apiClient } from "@/shared/apiClient";
 import { queryKeys } from "@/shared/queryKeys";
+import { FeedFunIcon } from "@/shared/playfulIcons";
 import type { FeedEntry, FeedType, FeedUnit, FeedUpdate } from "@/shared/types";
 
 // -----------------------------------------------------------------------------
@@ -86,8 +87,8 @@ function Header({ onBack }: { onBack: () => void }): JSX.Element {
         >
           <ArrowLeftIcon className="h-5 w-5" />
         </button>
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-sky-100 text-sky-600">
-          <DropIcon className="h-4 w-4" />
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-sky-100">
+          <FeedFunIcon className="h-6 w-6" />
         </span>
         <h1 className="text-lg font-semibold text-slate-900">Feed history</h1>
       </div>
@@ -215,8 +216,8 @@ function FeedRow({
         aria-label={`Edit ${prettyFeedType(feed.feed_type)} feed at ${format(parseISO(feed.occurred_at), "h:mm a")}`}
         className="flex w-full items-center gap-3 rounded-2xl bg-white px-3 py-3 text-left shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-600">
-          <DropIcon className="h-5 w-5" />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-100">
+          <FeedFunIcon className="h-7 w-7" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-semibold text-slate-900">
@@ -523,14 +524,6 @@ function CalendarIcon({ className }: IconProps): JSX.Element {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M16 3v4M8 3v4M3 10h18" />
-    </svg>
-  );
-}
-
-function DropIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 2.5c2.5 3.5 7 8.2 7 12.3a7 7 0 11-14 0c0-4.1 4.5-8.8 7-12.3z" />
     </svg>
   );
 }

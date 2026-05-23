@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MomDiary — Playful Icon Suggestions</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      body { margin: 0; padding: 32px; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p.lede { margin: 0 0 32px; color: #475569; }
+      section { margin-bottom: 32px; }
+      h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin: 0 0 12px; }
+      .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+      .card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      }
+      .tile {
+        width: 56px;
+        height: 56px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+      }
+      .tile svg { width: 40px; height: 40px; }
+      .label { font-size: 12px; color: #334155; text-align: center; }
+      .label strong { display: block; color: #0f172a; font-size: 13px; margin-bottom: 2px; }
+      .bg-sky { background: #e0f2fe; }
+      .bg-orange { background: #ffedd5; }
+      .bg-rose { background: #ffe4e6; }
+      .bg-violet { background: #ede9fe; }
+      .bg-indigo { background: #e0e7ff; }
+      .bg-amber { background: #fef3c7; }
+      .bg-emerald { background: #d1fae5; }
+      .bg-pink { background: #fce7f3; }
+      .bg-slate { background: #f1f5f9; }
+      .bg-gradient { background: linear-gradient(135deg, #fed7aa, #fbcfe8); }
+      .legend { font-size: 11px; color: #64748b; margin-top: 4px; }
+      .current { outline: 2px solid #22c55e; outline-offset: 3px; }
+      .badge {
+        position: relative;
+      }
+      .badge::after {
+        content: "current";
+        position: absolute;
+        top: -8px; right: -10px;
+        background: #22c55e; color: white; font-size: 9px; padding: 2px 6px; border-radius: 999px; font-weight: 600; letter-spacing: 0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Playful Icon Suggestions</h1>
+    <p class="lede">Hover/inspect to compare. Green ring = already implemented in the app.</p>
+
+    <!-- =========================================================== FEED -->
+    <section>
+      <h2>Feed</h2>
+      <div class="row">
+        <!-- Current: bottle -->
+        <div class="card">
+          <div class="tile bg-sky badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9.5" y="1.8" width="5" height="2.6" rx="1.2" fill="#fcd9b0" stroke="#f59e0b" stroke-width="0.5"/>
+              <rect x="8.3" y="4.4" width="7.4" height="2" rx="0.5" fill="#94a3b8"/>
+              <rect x="7.3" y="6.4" width="9.4" height="15.2" rx="2.6" fill="#fff" stroke="#3b82f6" stroke-width="1.2"/>
+              <path d="M7.5 14h9" stroke="#bfdbfe" stroke-width="1.4" stroke-linecap="round"/>
+              <circle cx="10.4" cy="12" r=".75" fill="#0f172a"/>
+              <circle cx="13.6" cy="12" r=".75" fill="#0f172a"/>
+              <path d="M10.4 15 Q12 16.3 13.6 15" stroke="#0f172a" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <path d="M19.2 3.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z" fill="#fde047" stroke="#f59e0b" stroke-width=".3"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Baby bottle</strong>smiling, sparkle</div>
+        </div>
+        <!-- Sippy cup -->
+        <div class="card">
+          <div class="tile bg-sky">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <!-- straw -->
+              <path d="M14 3 L14 7 L17 7" stroke="#f43f5e" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- lid -->
+              <rect x="5.5" y="6" width="13" height="3" rx="1" fill="#94a3b8"/>
+              <!-- cup body -->
+              <path d="M6 9 L18 9 L17 21 Q12 22.5 7 21 Z" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+              <!-- handles -->
+              <path d="M6 11 q-3 1 -3 4 q0 3 3 4" stroke="#f59e0b" stroke-width="1.4" fill="none"/>
+              <path d="M18 11 q3 1 3 4 q0 3 -3 4" stroke="#f59e0b" stroke-width="1.4" fill="none"/>
+              <!-- face -->
+              <circle cx="10" cy="15" r=".7" fill="#0f172a"/>
+              <circle cx="14" cy="15" r=".7" fill="#0f172a"/>
+              <path d="M10 17 Q12 18.2 14 17" stroke="#0f172a" stroke-width=".9" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Sippy cup</strong>straw + handles</div>
+        </div>
+        <!-- Milk carton -->
+        <div class="card">
+          <div class="tile bg-sky">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 8 L12 4 L18 8 L18 21 L6 21 Z" fill="#fff" stroke="#3b82f6" stroke-width="1.2" stroke-linejoin="round"/>
+              <path d="M12 4 L12 8 L6 8" stroke="#3b82f6" stroke-width="1" fill="none"/>
+              <!-- drop logo -->
+              <path d="M12 11 q-1.6 2 -1.6 3.4 a1.6 1.6 0 0 0 3.2 0 q0 -1.4 -1.6 -3.4z" fill="#60a5fa"/>
+              <!-- eyes peeking -->
+              <circle cx="9.5" cy="9" r=".6" fill="#0f172a"/>
+              <circle cx="14.5" cy="9" r=".6" fill="#0f172a"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Milk carton</strong>peeking eyes</div>
+        </div>
+        <!-- Bowl + spoon -->
+        <div class="card">
+          <div class="tile bg-orange">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <!-- steam -->
+              <path d="M9 4 q1 1.5 0 3" stroke="#94a3b8" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <path d="M12 3 q1 1.5 0 3" stroke="#94a3b8" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <!-- spoon (heart bowl) -->
+              <path d="M17 8 q2 0 2 2 q0 2 -2 2 q-2 0 -2 -2 q0 -2 2 -2z" fill="#fcd34d" stroke="#d97706" stroke-width=".6"/>
+              <rect x="16.6" y="11.5" width=".8" height="6" fill="#d97706"/>
+              <!-- bowl -->
+              <path d="M3 12 L21 12 Q20 20 12 20 Q4 20 3 12 Z" fill="#fda4af" stroke="#e11d48" stroke-width="1"/>
+              <ellipse cx="12" cy="12" rx="9" ry="1.4" fill="#fecdd3"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Bowl + spoon</strong>steamy meal</div>
+        </div>
+        <!-- Twin drops -->
+        <div class="card">
+          <div class="tile bg-sky">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 4 q-3 4 -3 6.5 a3 3 0 0 0 6 0 q0 -2.5 -3 -6.5z" fill="#bae6fd" stroke="#0284c7" stroke-width="1"/>
+              <path d="M15 9 q-3 4 -3 6.5 a3 3 0 0 0 6 0 q0 -2.5 -3 -6.5z" fill="#bae6fd" stroke="#0284c7" stroke-width="1"/>
+              <path d="M11 7 q2 -1 4 1" stroke="#16a34a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+              <ellipse cx="13.5" cy="6.5" rx="1.4" ry=".6" fill="#22c55e" transform="rotate(-30 13.5 6.5)"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Twin drops</strong>breast/bottle blend</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== SLEEP -->
+    <section>
+      <h2>Sleep</h2>
+      <div class="row">
+        <!-- Current: moon w/ nightcap -->
+        <div class="card">
+          <div class="tile bg-violet badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 14.5A8 8 0 1 1 8.2 6.6a6.2 6.2 0 0 0 11.8 7.9z" fill="#fcd34d" stroke="#d97706" stroke-width=".8" stroke-linejoin="round"/>
+              <path d="M11 13.2q1.6-1.5 3 0" stroke="#7c2d12" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <circle cx="14.5" cy="15" r=".9" fill="#fda4af" opacity=".7"/>
+              <path d="M5.5 9.5 L13 3.2 L15.5 9.5 Z" fill="#ef4444" stroke="#991b1b" stroke-width=".6" stroke-linejoin="round"/>
+              <circle cx="13.4" cy="3" r="1.4" fill="#fff" stroke="#cbd5e1" stroke-width=".4"/>
+              <path d="M17 6 L20 6 L17 9 L20 9" stroke="#7c3aed" stroke-width="1.1" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Nightcap moon</strong>cozy + zZz</div>
+        </div>
+        <!-- Sleeping cloud -->
+        <div class="card">
+          <div class="tile bg-indigo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 16 q-3 0 -3 -3 q0 -2.5 2.5 -3 q0 -3 3 -3 q2 0 3 2 q1.5 -1 3 0 q3 0 3 3 q2 0 2 2 q0 2 -2 2 z" fill="#e0e7ff" stroke="#6366f1" stroke-width="1" stroke-linejoin="round"/>
+              <path d="M9 13 q1 -1.2 2 0" stroke="#3730a3" stroke-width=".9" fill="none" stroke-linecap="round"/>
+              <path d="M13 13 q1 -1.2 2 0" stroke="#3730a3" stroke-width=".9" fill="none" stroke-linecap="round"/>
+              <path d="M17 5 L20 5 L17 8 L20 8" stroke="#7c3aed" stroke-width="1" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Sleeping cloud</strong>fluffy + zZz</div>
+        </div>
+        <!-- Star + moon -->
+        <div class="card">
+          <div class="tile bg-indigo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 14A6 6 0 1 1 10 6a5 5 0 0 0 8 8z" fill="#fcd34d" stroke="#d97706" stroke-width=".8"/>
+              <path d="M11 12 q1.2 -1.2 2.4 0" stroke="#7c2d12" stroke-width=".9" fill="none" stroke-linecap="round"/>
+              <path d="M19 13 l1 2.5 2.5 .3 -1.8 1.6 .5 2.5 -2.2 -1.3 -2.2 1.3 .5 -2.5 -1.8 -1.6 2.5 -.3z" fill="#a78bfa" stroke="#6d28d9" stroke-width=".5"/>
+              <circle cx="18.7" cy="16.2" r=".25" fill="#1e1b4b"/>
+              <circle cx="19.7" cy="16.2" r=".25" fill="#1e1b4b"/>
+              <path d="M18.7 17 q.5 .4 1 0" stroke="#1e1b4b" stroke-width=".4" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Star + moon</strong>pair of friends</div>
+        </div>
+        <!-- Pillow + ear -->
+        <div class="card">
+          <div class="tile bg-violet">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="10" width="18" height="9" rx="3" fill="#fecdd3" stroke="#f43f5e" stroke-width="1"/>
+              <path d="M5 12 q2 -1 5 0" stroke="#f43f5e" stroke-width=".7" fill="none"/>
+              <circle cx="13" cy="9.5" r="2.6" fill="#92400e"/>
+              <circle cx="13" cy="9.5" r="1.2" fill="#fcd9b0"/>
+              <path d="M17 6 L19 6 L17 8 L19 8" stroke="#7c3aed" stroke-width=".9" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Pillow + teddy</strong>ear poking out</div>
+        </div>
+        <!-- Crib -->
+        <div class="card">
+          <div class="tile bg-indigo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 8 L4 20 M20 8 L20 20" stroke="#92400e" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="M7 10 L7 18 M10 10 L10 18 M14 10 L14 18 M17 10 L17 18" stroke="#a16207" stroke-width=".8"/>
+              <path d="M3 10 L21 10" stroke="#92400e" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="M5 16 Q12 14 19 16 L19 20 L5 20 Z" fill="#bfdbfe" stroke="#3b82f6" stroke-width=".8"/>
+              <circle cx="12" cy="15.5" r="1.4" fill="#fcd9b0" stroke="#b45309" stroke-width=".5"/>
+              <path d="M18 5 l.4 1 1 .4 -1 .4 -.4 1 -.4 -1 -1 -.4 1 -.4z" fill="#fde047"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Crib</strong>baby tucked in</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== POOP -->
+    <section>
+      <h2>Poop</h2>
+      <div class="row">
+        <!-- Current: swirl -->
+        <div class="card">
+          <div class="tile bg-amber badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 21 Q3 13.5 12 13.5 Q21 13.5 21 21 Z" fill="#92400e"/>
+              <path d="M6 14.5 Q6 9 12 9 Q18 9 18 14.5 Z" fill="#b45309"/>
+              <path d="M9 9.5 Q9 4 12 4 Q15 4 15 9.5 Z" fill="#d97706"/>
+              <circle cx="9.8" cy="16.2" r="1.25" fill="#fff"/>
+              <circle cx="14.2" cy="16.2" r="1.25" fill="#fff"/>
+              <circle cx="9.8" cy="16.2" r=".55" fill="#0f172a"/>
+              <circle cx="14.2" cy="16.2" r=".55" fill="#0f172a"/>
+              <path d="M10 18.6 Q12 20.2 14 18.6" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+              <path d="M20 6l.3 .8 .8 .3 -.8 .3 -.3 .8 -.3 -.8 -.8 -.3 .8 -.3z" fill="#fde047"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Swirl emoji</strong>classic friendly</div>
+        </div>
+        <!-- Diaper -->
+        <div class="card">
+          <div class="tile bg-amber">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7 L20 7 L18 16 Q12 19 6 16 Z" fill="#fff" stroke="#94a3b8" stroke-width="1.1" stroke-linejoin="round"/>
+              <rect x="4" y="6.5" width="3.5" height="2" rx=".4" fill="#fcd34d"/>
+              <rect x="16.5" y="6.5" width="3.5" height="2" rx=".4" fill="#fcd34d"/>
+              <path d="M9 11 l.3 .8 .8 .3 -.8 .3 -.3 .8 -.3 -.8 -.8 -.3 .8 -.3z" fill="#60a5fa"/>
+              <path d="M14.5 11 l.3 .8 .8 .3 -.8 .3 -.3 .8 -.3 -.8 -.8 -.3 .8 -.3z" fill="#f472b6"/>
+              <path d="M8 14 Q12 16 16 14" stroke="#cbd5e1" stroke-width=".8" fill="none"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Diaper</strong>fresh + sparkle</div>
+        </div>
+        <!-- Toilet -->
+        <div class="card">
+          <div class="tile bg-slate">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="6" y="3" width="12" height="6" rx="1.5" fill="#e2e8f0" stroke="#64748b" stroke-width="1"/>
+              <rect x="9" y="8" width="6" height="2" fill="#94a3b8"/>
+              <path d="M5 10 L19 10 L17 17 Q12 19 7 17 Z" fill="#fff" stroke="#64748b" stroke-width="1.1" stroke-linejoin="round"/>
+              <ellipse cx="12" cy="13" rx="4.5" ry="2.2" fill="#bae6fd"/>
+              <circle cx="10.5" cy="13" r=".5" fill="#0f172a"/>
+              <circle cx="13.5" cy="13" r=".5" fill="#0f172a"/>
+              <path d="M10.5 14.3 Q12 15.3 13.5 14.3" stroke="#0f172a" stroke-width=".8" fill="none" stroke-linecap="round"/>
+              <rect x="8" y="17" width="8" height="3" rx=".6" fill="#cbd5e1"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Toilet</strong>smiling bowl</div>
+        </div>
+        <!-- Sunglasses poop -->
+        <div class="card">
+          <div class="tile bg-amber">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 21 Q3 13.5 12 13.5 Q21 13.5 21 21 Z" fill="#92400e"/>
+              <path d="M6 14.5 Q6 9 12 9 Q18 9 18 14.5 Z" fill="#b45309"/>
+              <path d="M9 9.5 Q9 4 12 4 Q15 4 15 9.5 Z" fill="#d97706"/>
+              <rect x="7" y="15" width="4" height="2.4" rx=".6" fill="#0f172a"/>
+              <rect x="13" y="15" width="4" height="2.4" rx=".6" fill="#0f172a"/>
+              <path d="M11 16.2 L13 16.2" stroke="#0f172a" stroke-width=".8"/>
+              <path d="M10 19 Q12 20.5 14 19" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Shades poop</strong>extra attitude</div>
+        </div>
+        <!-- TP roll -->
+        <div class="card">
+          <div class="tile bg-slate">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <ellipse cx="12" cy="9" rx="7" ry="3" fill="#fff" stroke="#94a3b8" stroke-width="1"/>
+              <path d="M5 9 L5 16 Q5 19 12 19 Q19 19 19 16 L19 9" fill="#fff" stroke="#94a3b8" stroke-width="1"/>
+              <ellipse cx="12" cy="9" rx="2.4" ry="1" fill="#cbd5e1"/>
+              <circle cx="10" cy="13" r=".7" fill="#0f172a"/>
+              <circle cx="14" cy="13" r=".7" fill="#0f172a"/>
+              <path d="M10 15 Q12 16.4 14 15" stroke="#0f172a" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <path d="M12 19 Q14 21 17 21" stroke="#94a3b8" stroke-width="1" fill="none"/>
+            </svg>
+          </div>
+          <div class="label"><strong>TP roll</strong>with a tongue</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== APPT -->
+    <section>
+      <h2>Appointment</h2>
+      <div class="row">
+        <!-- Current: teddy -->
+        <div class="card">
+          <div class="tile bg-pink badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="6.2" cy="6.5" r="2.5" fill="#92400e"/>
+              <circle cx="17.8" cy="6.5" r="2.5" fill="#92400e"/>
+              <circle cx="6.2" cy="6.5" r="1.2" fill="#fcd9b0"/>
+              <circle cx="17.8" cy="6.5" r="1.2" fill="#fcd9b0"/>
+              <circle cx="12" cy="13.2" r="7.4" fill="#a16207" stroke="#7c2d12" stroke-width=".5"/>
+              <ellipse cx="12" cy="15.5" rx="3.6" ry="2.6" fill="#fde68a"/>
+              <ellipse cx="12" cy="13.9" rx="1" ry=".75" fill="#0f172a"/>
+              <path d="M12 14.6 v.9" stroke="#0f172a" stroke-width=".7" stroke-linecap="round"/>
+              <path d="M10.4 16.4 Q12 17.6 13.6 16.4" stroke="#0f172a" stroke-width=".9" fill="none" stroke-linecap="round"/>
+              <circle cx="9.4" cy="11" r=".85" fill="#0f172a"/>
+              <circle cx="14.6" cy="11" r=".85" fill="#0f172a"/>
+              <g transform="rotate(30 16.8 12.5)">
+                <rect x="14.8" y="11.7" width="4" height="1.6" rx=".7" fill="#fca5a5" stroke="#f87171" stroke-width=".3"/>
+              </g>
+            </svg>
+          </div>
+          <div class="label"><strong>Teddy bear</strong>w/ bandaid</div>
+        </div>
+        <!-- Doctor bag -->
+        <div class="card">
+          <div class="tile bg-rose">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 6 Q8 4 12 4 Q16 4 16 6" stroke="#0f172a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+              <rect x="3" y="6" width="18" height="13" rx="2" fill="#1f2937" stroke="#0f172a" stroke-width=".8"/>
+              <rect x="10.5" y="6" width="3" height="13" fill="#374151"/>
+              <rect x="11" y="11" width="2" height="4" fill="#fff"/>
+              <rect x="10" y="12" width="4" height="2" fill="#fff"/>
+              <rect x="9" y="8" width="6" height="1.4" rx=".4" fill="#fbbf24"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Doctor bag</strong>red cross</div>
+        </div>
+        <!-- Calendar heart -->
+        <div class="card">
+          <div class="tile bg-pink">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2" fill="#fff" stroke="#f472b6" stroke-width="1.2"/>
+              <rect x="3" y="5" width="18" height="4" fill="#f472b6"/>
+              <rect x="6" y="3" width="2" height="4" rx=".4" fill="#be185d"/>
+              <rect x="16" y="3" width="2" height="4" rx=".4" fill="#be185d"/>
+              <path d="M12 18 Q8 15 8 13 Q8 11 10 11 Q11.4 11 12 12.4 Q12.6 11 14 11 Q16 11 16 13 Q16 15 12 18z" fill="#ef4444"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Calendar + heart</strong>care date</div>
+        </div>
+        <!-- Clipboard check -->
+        <div class="card">
+          <div class="tile bg-emerald">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="17" rx="2" fill="#fff" stroke="#10b981" stroke-width="1.2"/>
+              <rect x="9" y="3" width="6" height="3" rx=".6" fill="#10b981"/>
+              <path d="M8 13 L11 16 L16 10" stroke="#10b981" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="17" cy="19" r="1.6" fill="#fbbf24"/>
+              <circle cx="16.5" cy="18.7" r=".25" fill="#0f172a"/>
+              <circle cx="17.5" cy="18.7" r=".25" fill="#0f172a"/>
+              <path d="M16.5 19.3 q.5 .4 1 0" stroke="#0f172a" stroke-width=".3" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Clipboard</strong>checked + smiley</div>
+        </div>
+        <!-- Bandaid + thermometer -->
+        <div class="card">
+          <div class="tile bg-rose">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g transform="rotate(-30 12 12)">
+                <rect x="3" y="10.5" width="18" height="3" rx="1.4" fill="#fca5a5" stroke="#f87171" stroke-width=".6"/>
+                <rect x="9" y="10.5" width="6" height="3" fill="#fda4af"/>
+                <circle cx="10" cy="12" r=".25" fill="#7f1d1d"/>
+                <circle cx="11" cy="12" r=".25" fill="#7f1d1d"/>
+                <circle cx="13" cy="12" r=".25" fill="#7f1d1d"/>
+                <circle cx="14" cy="12" r=".25" fill="#7f1d1d"/>
+              </g>
+              <g transform="rotate(30 12 12)">
+                <rect x="10.5" y="3" width="3" height="14" rx="1.4" fill="#fff" stroke="#64748b" stroke-width=".8"/>
+                <circle cx="12" cy="18" r="2.5" fill="#ef4444"/>
+                <rect x="11.4" y="6" width="1.2" height="9" fill="#ef4444"/>
+              </g>
+            </svg>
+          </div>
+          <div class="label"><strong>Bandaid + thermo</strong>no character</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== CHAT -->
+    <section>
+      <h2>Chat (optional refresh)</h2>
+      <div class="row">
+        <!-- Current: gradient bubble -->
+        <div class="card">
+          <div class="tile bg-gradient badge">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="cg1" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#fb923c"/>
+                  <stop offset="1" stop-color="#f43f5e"/>
+                </linearGradient>
+              </defs>
+              <path d="M4 6 q0 -3 3 -3 h10 q3 0 3 3 v7 q0 3 -3 3 H10 l-4 4 v-4 q-2 -0.5 -2 -3 z" fill="url(#cg1)"/>
+              <path d="M9 11 Q12 13.5 15 11" stroke="#fff" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+              <path d="M18 5 l.3 .8 .8 .3 -.8 .3 -.3 .8 -.3 -.8 -.8 -.3 .8 -.3z" fill="#fde68a"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Gradient bubble</strong>smile + sparkle</div>
+        </div>
+        <!-- Pacifier bubble -->
+        <div class="card">
+          <div class="tile bg-gradient">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="cg2" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#fb923c"/>
+                  <stop offset="1" stop-color="#f43f5e"/>
+                </linearGradient>
+              </defs>
+              <path d="M4 6 q0 -3 3 -3 h10 q3 0 3 3 v7 q0 3 -3 3 H10 l-4 4 v-4 q-2 -0.5 -2 -3 z" fill="url(#cg2)"/>
+              <circle cx="12" cy="10" r="2.5" fill="#fde68a" stroke="#fff" stroke-width="1"/>
+              <ellipse cx="12" cy="13.4" rx="3.2" ry="1.5" fill="#fff" stroke="#fde68a" stroke-width=".8"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Bubble + pacifier</strong>baby-themed</div>
+        </div>
+        <!-- Heart-tail -->
+        <div class="card">
+          <div class="tile bg-gradient">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="cg3" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#fb7185"/>
+                  <stop offset="1" stop-color="#f43f5e"/>
+                </linearGradient>
+              </defs>
+              <rect x="4" y="3" width="16" height="13" rx="3.5" fill="url(#cg3)"/>
+              <path d="M9 18 Q9 14 12 14 Q15 14 15 16 Q15 19 12 21 Q9 19 9 18z" fill="#f43f5e"/>
+              <circle cx="10" cy="9" r="1" fill="#fff"/>
+              <circle cx="14" cy="9" r="1" fill="#fff"/>
+              <path d="M10 11.5 Q12 13 14 11.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Heart-tail bubble</strong>warm</div>
+        </div>
+        <!-- Two stacked bubbles -->
+        <div class="card">
+          <div class="tile bg-gradient">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6 q0 -2 2 -2 h8 q2 0 2 2 v4 q0 2 -2 2 H8 l-3 3 v-3 q-2 0 -2 -2 z" fill="#fb923c"/>
+              <path d="M9 12 q0 -2 2 -2 h8 q2 0 2 2 v4 q0 2 -2 2 H14 l-3 3 v-3 q-2 0 -2 -2 z" fill="#f43f5e"/>
+            </svg>
+          </div>
+          <div class="label"><strong>Two bubbles</strong>back & forth</div>
+        </div>
+      </div>
+    </section>
+
+    <p class="legend">Tell me which set you'd like and I'll wire them in. e.g. <em>"Feed → sippy cup, Sleep → cloud, Poop → toilet, Appt → doctor's bag"</em>.</p>
+  </body>
+</html>

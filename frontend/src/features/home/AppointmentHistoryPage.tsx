@@ -4,6 +4,7 @@ import { addDays, format, isSameDay, parseISO, startOfDay } from "date-fns";
 import { useAppointments } from "@/features/appointments/useAppointments";
 import { apiClient } from "@/shared/apiClient";
 import { queryKeys } from "@/shared/queryKeys";
+import { AppointmentFunIcon } from "@/shared/playfulIcons";
 import type { AppointmentEntry, AppointmentUpdate } from "@/shared/types";
 
 // -----------------------------------------------------------------------------
@@ -86,8 +87,8 @@ function Header({ onBack }: { onBack: () => void }): JSX.Element {
         >
           <ArrowLeftIcon className="h-5 w-5" />
         </button>
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-pink-100 text-pink-600">
-          <StethoscopeIcon className="h-4 w-4" />
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-pink-100">
+          <AppointmentFunIcon className="h-6 w-6" />
         </span>
         <h1 className="text-lg font-semibold text-slate-900">Appointments</h1>
       </div>
@@ -207,8 +208,8 @@ function AppointmentRow({
         aria-label={`Edit appointment at ${format(when, "h:mm a")}`}
         className="flex w-full items-center gap-3 rounded-2xl bg-white px-3 py-3 text-left shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink-100 text-pink-600">
-          <StethoscopeIcon className="h-5 w-5" />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink-100">
+          <AppointmentFunIcon className="h-7 w-7" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-semibold text-slate-900">
@@ -485,16 +486,6 @@ function CalendarIcon({ className }: IconProps): JSX.Element {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M16 3v4M8 3v4M3 10h18" />
-    </svg>
-  );
-}
-
-function StethoscopeIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M6 3v6a5 5 0 0010 0V3" />
-      <circle cx="18" cy="15" r="2.5" />
-      <path d="M11 14v2a4 4 0 004 4 4 4 0 004-4v-1.5" />
     </svg>
   );
 }

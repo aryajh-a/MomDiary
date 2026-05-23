@@ -7,6 +7,12 @@ import { useAppointments } from "@/features/appointments/useAppointments";
 import { useBabies } from "@/features/babies/useBabies";
 import { useChatContext } from "@/features/chat/ChatContext";
 import { useSelectedDate } from "@/features/date/useSelectedDate";
+import {
+  AppointmentFunIcon,
+  FeedFunIcon,
+  PoopFunIcon,
+  SleepFunIcon,
+} from "@/shared/playfulIcons";
 import type {
   AppointmentEntry,
   FeedEntry,
@@ -237,7 +243,7 @@ function QuickLogGrid(props: {
         <QuickLogTile
           key="feed"
           label="Feed"
-          icon={<DropIcon className="h-5 w-5" />}
+          icon={<FeedFunIcon className="h-7 w-7" />}
           bg="bg-sky-100"
           fg="text-sky-600"
           disabled={false}
@@ -246,7 +252,7 @@ function QuickLogGrid(props: {
         <QuickLogTile
           key="sleep"
           label="Sleep"
-          icon={<MoonIcon className="h-5 w-5" />}
+          icon={<SleepFunIcon className="h-7 w-7" />}
           bg="bg-violet-100"
           fg="text-violet-600"
           disabled={false}
@@ -255,7 +261,7 @@ function QuickLogGrid(props: {
         <QuickLogTile
           key="poop"
           label="Poop"
-          icon={<PoopIcon className="h-5 w-5" />}
+          icon={<PoopFunIcon className="h-7 w-7" />}
           bg="bg-amber-100"
           fg="text-amber-700"
           disabled={false}
@@ -264,7 +270,7 @@ function QuickLogGrid(props: {
         <QuickLogTile
           key="appt"
           label="Appt"
-          icon={<StethoscopeIcon className="h-5 w-5" />}
+          icon={<AppointmentFunIcon className="h-7 w-7" />}
           bg="bg-pink-100"
           fg="text-pink-600"
           disabled={false}
@@ -350,7 +356,7 @@ function RecentLogs(props: {
         detail: `${f.quantity}${f.unit} · ${shortFeed(f.feed_type)}`,
         bg: "bg-sky-100",
         fg: "text-sky-600",
-        icon: <DropIcon className="h-4 w-4" />,
+        icon: <FeedFunIcon className="h-5 w-5" />,
       });
     }
     for (const s of props.sleeps) {
@@ -361,7 +367,7 @@ function RecentLogs(props: {
         detail: formatDuration(s.duration_minutes),
         bg: "bg-violet-100",
         fg: "text-violet-600",
-        icon: <MoonIcon className="h-4 w-4" />,
+        icon: <SleepFunIcon className="h-5 w-5" />,
       });
     }
     for (const p of props.poops) {
@@ -372,7 +378,7 @@ function RecentLogs(props: {
         detail: p.consistency,
         bg: "bg-amber-100",
         fg: "text-amber-700",
-        icon: <PoopIcon className="h-4 w-4" />,
+        icon: <PoopFunIcon className="h-5 w-5" />,
       });
     }
     for (const a of props.appointments) {
@@ -383,7 +389,7 @@ function RecentLogs(props: {
         detail: format(parseISO(a.scheduled_at), "h:mm a"),
         bg: "bg-pink-100",
         fg: "text-pink-600",
-        icon: <StethoscopeIcon className="h-4 w-4" />,
+        icon: <AppointmentFunIcon className="h-5 w-5" />,
       });
     }
     out.sort((a, b) => b.iso.localeCompare(a.iso));
@@ -528,40 +534,6 @@ function BellIcon({ className }: IconProps): JSX.Element {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <path d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8" />
       <path d="M10.3 21a2 2 0 003.4 0" />
-    </svg>
-  );
-}
-
-function DropIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 2.5c2.5 3.5 7 8.2 7 12.3a7 7 0 11-14 0c0-4.1 4.5-8.8 7-12.3z" />
-    </svg>
-  );
-}
-
-function MoonIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M21 13.5A9 9 0 0110.5 3a7.5 7.5 0 1010.5 10.5z" />
-    </svg>
-  );
-}
-
-function PoopIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 3c0 2 2 3 2 5s-2 2-2 4c3 0 5 1.5 5 4 2 0 3 1.5 3 3.5S18.5 22 16 22H8c-2.5 0-4-1.5-4-3.5S5 15 7 15c0-2.5 2-4 5-4-2-1-3-2.5-3-4s2-2.5 3-4z" />
-    </svg>
-  );
-}
-
-function StethoscopeIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
-      <path d="M6 3v6a4 4 0 008 0V3" />
-      <path d="M10 13v3a4 4 0 008 0v-2" />
-      <circle cx="18" cy="11" r="2" />
     </svg>
   );
 }
