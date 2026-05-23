@@ -445,7 +445,7 @@ function BottomTabBar({ onOpenChat }: { onOpenChat: () => void }): JSX.Element {
     >
       <TabButton label="Home" active icon={<HomeIcon className="h-5 w-5" />} />
       <TabButton label="Insights" icon={<ChartIcon className="h-5 w-5" />} />
-      <TabButton label="Chat" onClick={onOpenChat} icon={<ChatIcon className="h-5 w-5" />} />
+      <TabButton label="Chat" onClick={onOpenChat} icon={<ChatIcon className="h-7 w-7" />} />
       <TabButton label="Calendar" icon={<CalendarIcon className="h-5 w-5" />} />
       <TabButton label="Profile" icon={<UserIcon className="h-5 w-5" />} />
     </nav>

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessageList } from "./ChatMessageList";
 import { useChatContext } from "./ChatContext";
-
 interface ChatPanelProps {
   onHide?: () => void;
 }
@@ -50,10 +49,16 @@ interface UseSpeechRecognitionOptions {
   onTranscript: (text: string, isFinal: boolean) => void;
   onFinal?: (text: string) => void;
   lang?: string;
+  /**
+   * How long the recognizer must hear silence (no new interim/final results)
+   * before it commits and auto-submits. Users routinely pause mid-sentence,
+   * so this should be generous — default 1800ms.
+   */
+  silenceMs?: number;
 }
 
 function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
-  const { onTranscript, onFinal, lang } = opts;
+  const { onTranscript, onFinal, lang, silenceMs = 1800 } = opts;
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recRef = useRef<SRInstance | null>(null);
@@ -66,28 +71,62 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     onFinalRef.current = onFinal;
   }, [onFinal]);
 
+  // Cross-restart session state. `start()` resets these; `onend` auto-restart
+  // preserves them so the running transcript survives a browser-induced gap.
+  const finalAccumRef = useRef("");
+  const lastInterimRef = useRef("");
+  const silenceTimerRef = useRef<number | null>(null);
+  const manualStopRef = useRef(false);
+  const committedRef = useRef(false);
+
   const Ctor = getSRCtor();
   const supported = Ctor !== null;
 
-  const stop = useCallback(() => {
-    const rec = recRef.current;
-    if (!rec) return;
-    try {
-      rec.stop();
-    } catch {
-      // ignore
+  const clearSilence = () => {
+    if (silenceTimerRef.current != null) {
+      window.clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
-  }, []);
+  };
 
-  const start = useCallback(() => {
-    if (!Ctor) return;
-    if (recRef.current) {
+  // Fire the final transcript exactly once and stop the recognizer.
+  const commit = useCallback(() => {
+    if (committedRef.current) return;
+    clearSilence();
+    committedRef.current = true;
+    manualStopRef.current = true;
+    const text = (finalAccumRef.current + lastInterimRef.current).trim();
+    const rec = recRef.current;
+    if (rec) {
       try {
-        recRef.current.abort();
+        rec.stop();
       } catch {
         // ignore
       }
     }
+    if (text && onFinalRef.current) onFinalRef.current(text);
+  }, []);
+
+  // Cancel without submitting (user tapped the cancel pill).
+  const stop = useCallback(() => {
+    clearSilence();
+    committedRef.current = true; // suppress any pending final
+    manualStopRef.current = true;
+    const rec = recRef.current;
+    if (rec) {
+      try {
+        rec.stop();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Creates a fresh recognizer instance and wires its handlers. Used both for
+  // a brand-new session (`start`) and to seamlessly resume after a browser
+  // auto-end mid-utterance. Resetting of session state happens in `start()`.
+  const createAndStart = useCallback(() => {
+    if (!Ctor) return;
     let rec: SRInstance;
     try {
       rec = new Ctor();
@@ -97,28 +136,55 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     }
     rec.lang = lang ?? (typeof navigator !== "undefined" ? navigator.language : "en-US");
     rec.interimResults = true;
-    rec.continuous = false;
+    // Continuous mode lets the user pause between words without the engine
+    // finalising the utterance the moment they stop talking.
+    rec.continuous = true;
+
     rec.onresult = (e) => {
       let interim = "";
-      let final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (!r) continue;
         const t = r[0]?.transcript ?? "";
-        if (r.isFinal) final += t;
+        if (r.isFinal) finalAccumRef.current += t;
         else interim += t;
       }
-      const combined = (final + interim).trim();
-      if (combined) onTranscriptRef.current(combined, !!final);
-      if (final && onFinalRef.current) onFinalRef.current(final.trim());
+      lastInterimRef.current = interim;
+      const combined = (finalAccumRef.current + interim).trim();
+      if (combined) onTranscriptRef.current(combined, false);
+      // Any speech activity resets the silence countdown.
+      clearSilence();
+      silenceTimerRef.current = window.setTimeout(() => {
+        commit();
+      }, silenceMs);
     };
     rec.onerror = (e) => {
-      setError(e.error || "Recognition error");
-      setListening(false);
+      // "no-speech" is benign — the silence timer will eventually commit (or
+      // the user will cancel). Surface anything else.
+      if (e.error && e.error !== "no-speech" && e.error !== "aborted") {
+        setError(e.error);
+      }
     };
     rec.onend = () => {
-      setListening(false);
       recRef.current = null;
+      if (!manualStopRef.current && !committedRef.current) {
+        // Browser auto-ended mid-session (Chrome does this even with
+        // continuous=true after a few seconds of silence). Resume so the
+        // user's pause doesn't terminate dictation.
+        try {
+          createAndStartRef.current();
+          return;
+        } catch {
+          // fall through to a graceful close
+        }
+      }
+      clearSilence();
+      setListening(false);
+      if (!committedRef.current) {
+        committedRef.current = true;
+        const text = (finalAccumRef.current + lastInterimRef.current).trim();
+        if (text && onFinalRef.current) onFinalRef.current(text);
+      }
     };
 
     try {
@@ -129,7 +195,31 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not start mic");
     }
-  }, [Ctor, lang]);
+  }, [Ctor, lang, silenceMs, commit]);
+
+  const createAndStartRef = useRef(createAndStart);
+  useEffect(() => {
+    createAndStartRef.current = createAndStart;
+  }, [createAndStart]);
+
+  const start = useCallback(() => {
+    if (!Ctor) return;
+    // Fresh session — wipe accumulated transcript and flags.
+    finalAccumRef.current = "";
+    lastInterimRef.current = "";
+    manualStopRef.current = false;
+    committedRef.current = false;
+    clearSilence();
+    if (recRef.current) {
+      try {
+        recRef.current.abort();
+      } catch {
+        // ignore
+      }
+      recRef.current = null;
+    }
+    createAndStart();
+  }, [Ctor, createAndStart]);
 
   const toggle = useCallback(() => {
     if (listening) stop();
@@ -138,6 +228,7 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
 
   useEffect(() => {
     return () => {
+      clearSilence();
       const rec = recRef.current;
       if (rec) {
         try {
@@ -156,7 +247,8 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
 
 export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
   const { messages, inFlight, draft, setDraft, submit } = useChatContext();
-  const [autoSend, setAutoSend] = useState(true);
+  const autoSend = true;
+  const [voiceMode, setVoiceMode] = useState(false);
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -180,7 +272,7 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
     [autoSend, submit],
   );
 
-  const { supported, listening, error: micError, toggle, stop } =
+  const { supported, listening, error: micError, start, stop } =
     useSpeechRecognition({
       onTranscript: handleTranscript,
       onFinal: handleFinal,
@@ -192,93 +284,297 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
     if (inFlight && listening) stop();
   }, [inFlight, listening, stop]);
 
+  // When recognition ends (final transcript or stop()), close the voice view.
+  useEffect(() => {
+    if (voiceMode && !listening) {
+      const t = setTimeout(() => setVoiceMode(false), 250);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [voiceMode, listening]);
+
+  const enterVoiceMode = useCallback(() => {
+    if (inFlight) return;
+    setDraft("");
+    setVoiceMode(true);
+    start();
+  }, [inFlight, setDraft, start]);
+
+  const cancelVoiceMode = useCallback(() => {
+    stop();
+    setDraft("");
+    setVoiceMode(false);
+  }, [stop, setDraft]);
+
+  const sendQuick = useCallback(
+    (text: string) => {
+      if (inFlight) return;
+      void submit(text);
+    },
+    [inFlight, submit],
+  );
+
   return (
     <section
       aria-label="Chat"
-      className="mx-auto flex w-full max-w-md flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg lg:max-w-none"
+      className="mx-auto flex h-[34rem] max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-orange-50 shadow-2xl ring-1 ring-orange-200 sm:rounded-2xl"
     >
-      {onHide ? (
-        <div className="flex justify-end">
+      {/* Header */}
+      <header className="flex items-center gap-3 border-b border-orange-100 bg-orange-50 px-3 py-3">
+        {onHide ? (
           <button
             type="button"
             onClick={onHide}
-            aria-label="Hide chat"
-            className="rounded px-2 py-0.5 text-slate-500 text-xs hover:bg-slate-100 hover:text-slate-900"
+            aria-label="Close chat"
+            className="grid h-8 w-8 place-items-center rounded-full text-orange-700 hover:bg-orange-100"
           >
-            ✕ Hide
-          </button>
-        </div>
-      ) : null}
-      <ChatMessageList messages={messages} />
-      {inFlight ? (
-        <p className="text-slate-500 text-xs" role="status" aria-live="polite">
-          Thinking…
-        </p>
-      ) : null}
-      {listening ? (
-        <p className="text-rose-600 text-xs" role="status" aria-live="polite">
-          🎙️ Listening…
-        </p>
-      ) : null}
-      {micError ? (
-        <p className="text-amber-700 text-xs" role="alert">
-          Mic: {micError}
-        </p>
-      ) : null}
-      <form onSubmit={onSubmit} className="flex items-end gap-2">
-        <textarea
-          aria-label="Message"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          readOnly={inFlight}
-          rows={2}
-          placeholder="Log a feed, sleep, diaper, or appointment…"
-          className="flex-1 resize-none rounded border border-slate-300 px-2 py-1 text-sm focus:border-slate-500 focus:outline-none"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void submit(draft);
-            }
-          }}
-        />
-        {supported ? (
-          <button
-            type="button"
-            onClick={toggle}
-            disabled={inFlight}
-            aria-pressed={listening}
-            aria-label={listening ? "Stop voice input" : "Start voice input"}
-            title={listening ? "Stop voice input" : "Start voice input"}
-            className={
-              "rounded px-3 py-2 text-sm transition-colors " +
-              (listening
-                ? "bg-rose-600 text-white hover:bg-rose-700"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200") +
-              " disabled:opacity-50"
-            }
-          >
-            {listening ? "● Stop" : "🎤"}
+            <BackIcon className="h-5 w-5" />
           </button>
         ) : null}
-        <button
-          type="submit"
-          disabled={inFlight || draft.trim().length === 0}
-          className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:bg-slate-400"
-        >
-          Send
-        </button>
-      </form>
-      {supported ? (
-        <label className="flex items-center gap-2 text-slate-500 text-xs">
-          <input
-            type="checkbox"
-            checked={autoSend}
-            onChange={(e) => setAutoSend(e.target.checked)}
-          />
-          Auto-send after I stop speaking
-        </label>
-      ) : null}
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-orange-100 ring-1 ring-orange-200">
+          <SparkleIcon className="h-5 w-5 text-orange-600" />
+        </span>
+        <div className="flex flex-1 flex-col leading-tight">
+          <span className="font-semibold text-slate-900 text-sm">Baby AI</span>
+          <span className="text-[11px] text-slate-500">
+            {voiceMode || listening ? (
+              <span className="text-emerald-600">Listening…</span>
+            ) : (
+              <>
+                <span className="text-emerald-600">● Online</span>
+                <span className="px-1 text-slate-300">·</span>
+                Mia's assistant
+              </>
+            )}
+          </span>
+        </div>
+      </header>
+
+      {voiceMode ? (
+        <VoiceOverlay
+          transcript={draft}
+          listening={listening}
+          error={micError}
+          onCancel={cancelVoiceMode}
+        />
+      ) : (
+        <>
+          {/* Scrollable messages */}
+          <ChatMessageList messages={messages} inFlight={inFlight} />
+
+          {/* Mic error banner */}
+          {micError ? (
+            <div className="border-orange-100 border-t bg-orange-50 px-3 py-1">
+              <p className="text-[11px] text-amber-700" role="alert">
+                Mic: {micError}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Quick reply chips */}
+          <div className="flex flex-wrap gap-2 border-orange-100 border-t bg-orange-50 px-3 py-2">
+            {QUICK_REPLIES.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => sendQuick(q)}
+                disabled={inFlight}
+                className="rounded-full border border-orange-200 bg-white px-3 py-1 text-[12px] text-orange-700 hover:bg-orange-100 disabled:opacity-50"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
+          {/* Input row */}
+          <form
+            onSubmit={onSubmit}
+            className="flex items-center gap-2 border-orange-100 border-t bg-orange-50 px-3 py-3"
+          >
+            {supported ? (
+              <button
+                type="button"
+                onClick={enterVoiceMode}
+                disabled={inFlight}
+                aria-label="Start voice input"
+                title="Start voice input"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-500 text-white transition-colors hover:bg-orange-600 disabled:bg-orange-300"
+              >
+                <MicIcon className="h-5 w-5" />
+              </button>
+            ) : null}
+            <textarea
+              aria-label="Message"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              readOnly={inFlight}
+              rows={1}
+              placeholder="Type a message…"
+              className="flex-1 resize-none rounded-full border border-orange-200 bg-white px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void submit(draft);
+                }
+              }}
+            />
+            <button
+              type="submit"
+              disabled={inFlight || draft.trim().length === 0}
+              aria-label="Send"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-500 text-white hover:bg-orange-600 disabled:bg-orange-300"
+            >
+              <SendIcon className="h-5 w-5" />
+            </button>
+          </form>
+        </>
+      )}
     </section>
+  );
+}
+
+function VoiceOverlay({
+  transcript,
+  listening,
+  error,
+  onCancel,
+}: {
+  transcript: string;
+  listening: boolean;
+  error: string | null;
+  onCancel: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-between bg-orange-50 px-6 py-6">
+      <p className="text-sm text-slate-500">Speak your command…</p>
+
+      {/* Pulsing mic */}
+      <div className="relative grid h-40 w-40 place-items-center">
+        <span
+          aria-hidden="true"
+          className="absolute inline-flex h-full w-full rounded-full bg-orange-300/30 motion-safe:animate-ping"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute inline-flex h-28 w-28 rounded-full bg-orange-300/40 motion-safe:animate-ping [animation-delay:-0.4s]"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute inline-flex h-20 w-20 rounded-full bg-orange-200/60"
+        />
+        <span className="relative grid h-20 w-20 place-items-center rounded-full bg-orange-600 text-white shadow-lg">
+          <MicIcon className="h-9 w-9" />
+        </span>
+      </div>
+
+      {/* Waveform bars */}
+      <div className="flex h-10 items-end gap-1" aria-hidden="true">
+        {WAVEFORM_BARS.map((b, i) => (
+          <span
+            key={i}
+            className={
+              "w-1.5 rounded-full bg-orange-500 " +
+              b.h +
+              (listening ? " motion-safe:animate-pulse" : " opacity-40")
+            }
+            style={{ animationDelay: b.d }}
+          />
+        ))}
+      </div>
+
+      {/* Transcript card */}
+      <div className="w-full rounded-2xl bg-orange-100/70 px-4 py-3 text-center ring-1 ring-orange-200">
+        <p className="text-[11px] font-medium text-orange-700">
+          {error ? "Mic error" : "Hearing…"}
+        </p>
+        <p className="mt-1 text-sm text-slate-800">
+          {error ? error : transcript ? `“${transcript}”` : "…"}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded-full bg-white px-5 py-2 text-sm font-medium text-orange-700 shadow ring-1 ring-orange-200 hover:bg-orange-100"
+      >
+        Tap to cancel
+      </button>
+    </div>
+  );
+}
+
+const WAVEFORM_BARS: ReadonlyArray<{ h: string; d: string }> = [
+  { h: "h-2", d: "0s" },
+  { h: "h-4", d: "-0.15s" },
+  { h: "h-6", d: "-0.3s" },
+  { h: "h-8", d: "-0.45s" },
+  { h: "h-10", d: "-0.6s" },
+  { h: "h-8", d: "-0.75s" },
+  { h: "h-6", d: "-0.9s" },
+  { h: "h-4", d: "-1.05s" },
+  { h: "h-3", d: "-1.2s" },
+  { h: "h-5", d: "-1.35s" },
+  { h: "h-7", d: "-1.5s" },
+  { h: "h-3", d: "-1.65s" },
+];
+
+const QUICK_REPLIES: readonly string[] = [
+  "Log a nap",
+  "Last feed?",
+  "Book appt",
+  "Poop summary",
+] as const;
+
+function BackIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function SparkleIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 2l1.7 4.3L18 8l-4.3 1.7L12 14l-1.7-4.3L6 8l4.3-1.7L12 2z" />
+      <path d="M19 14l.8 1.9L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-1.1L19 14z" />
+    </svg>
+  );
+}
+
+function MicIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" stroke="none" />
+      <path d="M5 11a7 7 0 0014 0" />
+      <path d="M12 18v3" />
+    </svg>
+  );
+}
+
+function SendIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M3 20l18-8L3 4l3 8-3 8z" />
+    </svg>
   );
 }
 
