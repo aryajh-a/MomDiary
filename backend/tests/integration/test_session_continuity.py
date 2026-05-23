@@ -84,12 +84,15 @@ def history_aware_agent() -> _HistoryAwareScriptedAgent:
 
 @pytest_asyncio.fixture
 async def continuity_client(
-    configured_app: Any, history_aware_agent: _HistoryAwareScriptedAgent
+    configured_app: Any,
+    history_aware_agent: _HistoryAwareScriptedAgent,
+    seed_caregiver,
 ) -> AsyncIterator[AsyncClient]:
     configured_app.dependency_overrides[get_agent_runner] = lambda: history_aware_agent
     async with AsyncClient(
         transport=ASGITransport(app=configured_app), base_url="http://test"
     ) as c:
+        c.cookies.set("momdiary_session", seed_caregiver.session_token)
         yield c
     configured_app.dependency_overrides.clear()
 

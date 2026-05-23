@@ -79,12 +79,15 @@ def isolation_agent() -> _DeleteAwareScriptedAgent:
 
 @pytest_asyncio.fixture
 async def isolation_client(
-    configured_app: Any, isolation_agent: _DeleteAwareScriptedAgent
+    configured_app: Any,
+    isolation_agent: _DeleteAwareScriptedAgent,
+    seed_caregiver,
 ) -> AsyncIterator[AsyncClient]:
     configured_app.dependency_overrides[get_agent_runner] = lambda: isolation_agent
     async with AsyncClient(
         transport=ASGITransport(app=configured_app), base_url="http://test"
     ) as c:
+        c.cookies.set("momdiary_session", seed_caregiver.session_token)
         yield c
     configured_app.dependency_overrides.clear()
 

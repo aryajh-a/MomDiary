@@ -237,6 +237,33 @@ UI details:
 
 ---
 
+## Authentication & baby profiles
+
+Feature 006 introduced caregiver accounts and per-baby data scoping. Each
+caregiver registers with an email + password (Argon2id-hashed) and owns one or
+more **baby profiles**. Every diary entry — feed, sleep, poop, appointment — is
+scoped to a `baby_id`, and the agent's chat history is partitioned per
+`(user_id, baby_id, session_id)` so switching the active baby starts a clean
+conversation.
+
+Highlights:
+
+- **Login state**: HttpOnly `momdiary_session` cookie, opaque 256-bit token,
+  rolling 30-day expiry (touched on every request).
+- **Auth endpoints**: `POST /v1/auth/register`, `POST /v1/auth/login`,
+  `POST /v1/auth/logout`, `GET /v1/auth/me`.
+- **Baby endpoints**: `GET/POST /v1/babies`, `PATCH/DELETE /v1/babies/{id}`,
+  `POST /v1/users/me/active-baby`, `PATCH /v1/users/me`.
+- **Scoping**: every diary endpoint reads `active_baby_id` from the session
+  and rejects (404) any entry that does not belong to it.
+- **CSRF**: SameSite=Lax cookies plus an `Origin`/`Referer` allow-list on
+  state-changing methods.
+
+See [`specs/006-user-and-baby-profiles/quickstart.md`](specs/006-user-and-baby-profiles/quickstart.md)
+for end-to-end manual verification steps.
+
+---
+
 ## Further reading
 
 - [`backend/src/momdiary/agents/README.md`](backend/src/momdiary/agents/README.md) —

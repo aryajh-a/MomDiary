@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
+import structlog
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,6 +70,9 @@ async def current_user(
     await sessions.touch(sess)
     request.state.user_id = user.id
     request.state.session_token = token
+    # Bind into structlog contextvars so every downstream log line in this
+    # request automatically carries `user_id` (FR-022 / T071).
+    structlog.contextvars.bind_contextvars(user_id=user.id)
     return AuthContext(user=user, session_token=token)
 
 
@@ -119,6 +123,7 @@ async def require_active_baby(
 
     request.state.baby_id = baby.id
     set_active_baby_id(baby.id)
+    structlog.contextvars.bind_contextvars(baby_id=baby.id)
     return baby
 
 

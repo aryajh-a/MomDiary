@@ -7,6 +7,79 @@
 @contentType = application/json
 
 ###############################################################################
+# Feature 006 — Auth & baby profiles
+###############################################################################
+
+### Register a caregiver (response sets the `momdiary_session` cookie)
+# @name register
+POST {{baseUrl}}/v1/auth/register
+Content-Type: {{contentType}}
+
+{
+  "email": "alice@example.com",
+  "password": "Pa55word!alice",
+  "display_name": "Alice"
+}
+
+### Log in
+# @name login
+POST {{baseUrl}}/v1/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "alice@example.com",
+  "password": "Pa55word!alice"
+}
+
+### Current user (must be authenticated)
+GET {{baseUrl}}/v1/auth/me
+
+### Log out (revokes the session and clears the cookie)
+POST {{baseUrl}}/v1/auth/logout
+
+### Edit my display name
+PATCH {{baseUrl}}/v1/users/me
+Content-Type: {{contentType}}
+
+{
+  "display_name": "Alice C."
+}
+
+### Create a baby (first baby is auto-activated)
+# @name createBaby
+POST {{baseUrl}}/v1/babies
+Content-Type: {{contentType}}
+
+{
+  "display_name": "Bobby",
+  "date_of_birth": "2025-04-01"
+}
+
+### List my babies
+GET {{baseUrl}}/v1/babies
+
+### Set the active baby
+POST {{baseUrl}}/v1/users/me/active-baby
+Content-Type: {{contentType}}
+
+{
+  "baby_id": 1
+}
+
+### Edit a baby
+PATCH {{baseUrl}}/v1/babies/1
+Content-Type: {{contentType}}
+
+{
+  "display_name": "Bobby Jr.",
+  "color_tag": "#ff8800"
+}
+
+### Soft-delete a baby (active_baby_id is cleared if the deleted baby was active)
+DELETE {{baseUrl}}/v1/babies/1
+
+
+###############################################################################
 # Health
 ###############################################################################
 

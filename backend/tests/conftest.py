@@ -77,8 +77,133 @@ async def configured_app(
         get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
+@dataclass
+class SeedCaregiver:
+    """Seed-data record for the default authenticated caregiver fixture."""
+
+    user_id: int
+    baby_id: int
+    email: str
+    password: str
+    display_name: str
+    session_token: str
+
+
 @pytest_asyncio.fixture
-async def session(configured_app: Any) -> AsyncIterator[AsyncSession]:
+async def seed_caregiver(configured_app: Any) -> SeedCaregiver:
+    """Create a default user + baby + auth session for the test suite.
+
+    Most legacy tests assume an anonymous "happy path". Feature 006 added an
+    auth gate plus a baby-scoping context-var. To keep those tests valuable,
+    every test gets a single default caregiver pre-seeded and the
+    `active_baby_id` context-var pre-set; the `client` fixture also attaches
+    the corresponding session cookie. Tests that need multi-tenant scenarios
+    (e.g. T038, T040, T058) create extra users via `caregiver_factory`.
+    """
+    from momdiary.auth.context import set_active_baby_id
+    from momdiary.auth.hasher import get_password_hasher
+    from momdiary.auth.sessions import SessionService
+    from momdiary.models.orm import Baby, User
+
+    factory = get_session_factory()
+    hasher = get_password_hasher()
+    password = "Pa55word!seed"
+    async with factory() as s:
+        user = User(
+            email="seed@example.com",
+            password_hash=hasher.hash(password),
+            display_name="Seed Caregiver",
+        )
+        s.add(user)
+        await s.flush()
+        baby = Baby(
+            owner_user_id=user.id,
+            display_name="Seed Baby",
+            date_of_birth="2025-01-01",
+        )
+        s.add(baby)
+        await s.flush()
+        user.active_baby_id = baby.id
+        sessions = SessionService(s, ttl_days=30)
+        sess = await sessions.create(user_id=user.id, user_agent="pytest")
+        await s.commit()
+        token = sess.id
+        user_id, baby_id = user.id, baby.id
+
+    set_active_baby_id(baby_id)
+    return SeedCaregiver(
+        user_id=user_id,
+        baby_id=baby_id,
+        email="seed@example.com",
+        password=password,
+        display_name="Seed Caregiver",
+        session_token=token,
+    )
+
+
+@pytest_asyncio.fixture
+async def caregiver_factory(
+    configured_app: Any,
+) -> Any:
+    """Returns an async callable that creates additional caregivers on demand.
+
+    Usage:
+        carol = await caregiver_factory(email="carol@example.com", baby_name="Cara")
+        # carol.user_id, carol.baby_id, carol.session_token
+    """
+    from momdiary.auth.hasher import get_password_hasher
+    from momdiary.auth.sessions import SessionService
+    from momdiary.models.orm import Baby, User
+
+    factory = get_session_factory()
+    hasher = get_password_hasher()
+
+    async def _make(
+        *,
+        email: str,
+        password: str = "Pa55word!alt",
+        display_name: str = "Alt Caregiver",
+        baby_name: str | None = "Alt Baby",
+        date_of_birth: str = "2025-01-01",
+    ) -> SeedCaregiver:
+        async with factory() as s:
+            user = User(
+                email=email,
+                password_hash=hasher.hash(password),
+                display_name=display_name,
+            )
+            s.add(user)
+            await s.flush()
+            baby_id: int | None = None
+            if baby_name is not None:
+                baby = Baby(
+                    owner_user_id=user.id,
+                    display_name=baby_name,
+                    date_of_birth=date_of_birth,
+                )
+                s.add(baby)
+                await s.flush()
+                user.active_baby_id = baby.id
+                baby_id = baby.id
+            sessions = SessionService(s, ttl_days=30)
+            sess = await sessions.create(user_id=user.id, user_agent="pytest")
+            await s.commit()
+            return SeedCaregiver(
+                user_id=user.id,
+                baby_id=baby_id or 0,
+                email=email,
+                password=password,
+                display_name=display_name,
+                session_token=sess.id,
+            )
+
+    return _make
+
+
+@pytest_asyncio.fixture
+async def session(
+    configured_app: Any, seed_caregiver: SeedCaregiver
+) -> AsyncIterator[AsyncSession]:
     factory = get_session_factory()
     async with factory() as s:
         yield s
@@ -147,8 +272,28 @@ def scripted_agent() -> ScriptedAgent:
 
 @pytest_asyncio.fixture
 async def client(
+    configured_app: Any,
+    scripted_agent: ScriptedAgent,
+    seed_caregiver: SeedCaregiver,
+) -> AsyncIterator[AsyncClient]:
+    configured_app.dependency_overrides[get_agent_runner] = lambda: scripted_agent
+    async with AsyncClient(
+        transport=ASGITransport(app=configured_app), base_url="http://test"
+    ) as c:
+        c.cookies.set("momdiary_session", seed_caregiver.session_token)
+        yield c
+    configured_app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def anon_client(
     configured_app: Any, scripted_agent: ScriptedAgent
 ) -> AsyncIterator[AsyncClient]:
+    """Anonymous HTTP client — no session cookie attached.
+
+    Use this for register/login flows and for tests that explicitly verify
+    the 401 unauthenticated path.
+    """
     configured_app.dependency_overrides[get_agent_runner] = lambda: scripted_agent
     async with AsyncClient(
         transport=ASGITransport(app=configured_app), base_url="http://test"

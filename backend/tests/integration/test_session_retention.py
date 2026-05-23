@@ -34,7 +34,7 @@ class _Clock:
 
 @pytest_asyncio.fixture
 async def retention_setup(
-    configured_app: Any, scripted_agent: ScriptedAgent
+    configured_app: Any, scripted_agent: ScriptedAgent, seed_caregiver
 ) -> AsyncIterator[tuple[AsyncClient, InMemorySessionStore, _Clock]]:
     """Override the dependency with a small, clock-controlled store."""
     clock = _Clock(datetime(2026, 5, 16, 8, 0, 0, tzinfo=timezone.utc))
@@ -53,6 +53,7 @@ async def retention_setup(
     async with AsyncClient(
         transport=ASGITransport(app=configured_app), base_url="http://test"
     ) as c:
+        c.cookies.set("momdiary_session", seed_caregiver.session_token)
         yield c, store, clock
     configured_app.dependency_overrides.clear()
 
@@ -92,7 +93,9 @@ async def test_fifo_cap_via_http(
         )
         assert r.status_code == 201, r.text
 
-    chat_session = store._sessions[sid]  # type: ignore[attr-defined]
+    chat_session = next(
+        s for k, s in store._sessions.items() if k[2] == sid  # type: ignore[attr-defined]
+    )
     # Each HTTP call appends 2 turns (caregiver + assistant) → cap = max_turns*2.
     assert len(chat_session.turns) == max_turns * 2
 
@@ -116,13 +119,14 @@ async def test_lru_eviction_via_http(
         assert r.status_code == 201, r.text
         created_ids.append(r.headers["X-Session-ID"])
 
-    assert len(store._sessions) == max_sessions  # type: ignore[attr-defined]
+    resident_ids = {k[2] for k in store._sessions}  # type: ignore[attr-defined]
+    assert len(resident_ids) == max_sessions
     # The first `overflow` sessions should have been evicted.
     for evicted in created_ids[:overflow]:
-        assert evicted not in store._sessions  # type: ignore[attr-defined]
+        assert evicted not in resident_ids
     # The last `max_sessions` should still be resident.
     for kept in created_ids[overflow:]:
-        assert kept in store._sessions  # type: ignore[attr-defined]
+        assert kept in resident_ids
 
 
 @pytest.mark.asyncio
@@ -164,4 +168,5 @@ async def test_ttl_via_clock(
     sid2 = r2.headers["X-Session-ID"]
     assert sid2 != sid1, "expired session must yield a fresh id"
     # And the expired session must be gone from the store.
-    assert sid1 not in store._sessions  # type: ignore[attr-defined]
+    resident_ids = {k[2] for k in store._sessions}  # type: ignore[attr-defined]
+    assert sid1 not in resident_ids

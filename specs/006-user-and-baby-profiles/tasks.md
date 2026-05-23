@@ -48,9 +48,9 @@ description: "Task list for feature 006-user-and-baby-profiles"
 ### Auth module (no endpoints yet — just primitives)
 
 - [X] T013 Create [backend/src/momdiary/auth/hasher.py](backend/src/momdiary/auth/hasher.py) exposing `hash_password(plain) -> str`, `verify_password(hash, plain) -> bool`, `dummy_verify() -> None` (constant-time enumeration defense), and `needs_rehash(hash) -> bool`, all backed by `argon2.PasswordHasher` with the parameters from [research.md](./research.md) R1.
-- [ ] T014 [P] Unit test [backend/tests/unit/test_argon2_hasher.py](backend/tests/unit/test_argon2_hasher.py) covering: hash/verify round-trip, wrong-password rejection, `dummy_verify` constant-time path completes, `needs_rehash` returns False on freshly issued hashes.
+- [X] T014 [P] Unit test [backend/tests/unit/test_argon2_hasher.py](backend/tests/unit/test_argon2_hasher.py) covering: hash/verify round-trip, wrong-password rejection, `dummy_verify` constant-time path completes, `needs_rehash` returns False on freshly issued hashes.
 - [X] T015 Create [backend/src/momdiary/auth/sessions.py](backend/src/momdiary/auth/sessions.py) exposing `SessionService` with `issue(user_id, user_agent) -> session_id`, `validate_and_slide(session_id) -> User | None` (slides `expires_at` to `now()+30d` + updates `last_seen_at`), and `revoke(session_id) -> None`.
-- [ ] T016 [P] Unit test [backend/tests/unit/test_session_service.py](backend/tests/unit/test_session_service.py) covering: issuance produces a 32+ byte URL-safe token, validate succeeds → slides expiry, revoked sessions fail validation, expired sessions fail validation.
+- [X] T016 [P] Unit test [backend/tests/unit/test_session_service.py](backend/tests/unit/test_session_service.py) covering: issuance produces a 32+ byte URL-safe token, validate succeeds → slides expiry, revoked sessions fail validation, expired sessions fail validation.
 - [X] T017 Create [backend/src/momdiary/auth/dependencies.py](backend/src/momdiary/auth/dependencies.py) exposing FastAPI `Depends` callables: `get_current_user` (reads `momdiary_session` cookie → `SessionService.validate_and_slide` → 401 if missing/invalid), `get_active_baby` (reads `X-Active-Baby-Id` header or falls back to `users.active_baby_id`; 409 `no_active_baby` if none; 404 if header references an unowned baby).
 - [X] T018 Create [backend/src/momdiary/auth/middleware.py](backend/src/momdiary/auth/middleware.py) implementing an ASGI middleware that enriches `structlog` context with `user_id` and `baby_id` (both `None` for anonymous requests) and an `Origin`/`Referer` check on state-changing methods (POST/PUT/PATCH/DELETE) per [research.md](./research.md) R3.
 - [X] T019 [P] Create the module README at [backend/src/momdiary/auth/README.md](backend/src/momdiary/auth/README.md) documenting the public surface (per Constitution IV).
@@ -64,7 +64,7 @@ description: "Task list for feature 006-user-and-baby-profiles"
 ### Chat session store partitioning (FR-017)
 
 - [X] T023 Modify [backend/src/momdiary/services/chat_session_store.py](backend/src/momdiary/services/chat_session_store.py) to key all entries by the tuple `(user_id, baby_id, session_id)`; preserve existing TTL / bounds; reject lookups with any missing component.
-- [ ] T024 [P] Update unit test [backend/tests/unit/test_chat_session_store.py](backend/tests/unit/test_chat_session_store.py) (or add a new partition test) proving that sessions with same `session_id` but different `(user_id, baby_id)` are isolated.
+- [X] T024 [P] Update unit test [backend/tests/unit/test_chat_session_store.py](backend/tests/unit/test_chat_session_store.py) (or add a new partition test) proving that sessions with same `session_id` but different `(user_id, baby_id)` are isolated. — implemented as [backend/tests/unit/test_session_store_partition.py](backend/tests/unit/test_session_store_partition.py).
 
 ### Shared frontend wiring
 
@@ -84,7 +84,7 @@ description: "Task list for feature 006-user-and-baby-profiles"
 ### Tests for User Story 1 (write first, ensure they FAIL)
 
 - [ ] T027 [P] [US1] Contract test [backend/tests/contract/test_auth_and_profiles_contract.py](backend/tests/contract/test_auth_and_profiles_contract.py) — schema-validate `/v1/auth/register`, `/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/me` responses against [contracts/auth-and-profiles.openapi.yaml](./contracts/auth-and-profiles.openapi.yaml).
-- [ ] T028 [P] [US1] Integration test [backend/tests/integration/test_auth_endpoints.py](backend/tests/integration/test_auth_endpoints.py) covering: happy-path register-then-me, duplicate-email returns uniform 401 (FR-006), weak/invalid input returns 400, wrong-password returns 401, sign-out invalidates cookie, post-sign-out call returns 401 `unauthenticated`.
+- [X] T028 [P] [US1] Integration test [backend/tests/integration/test_auth_endpoints.py](backend/tests/integration/test_auth_endpoints.py) covering: happy-path register-then-me, duplicate-email returns uniform 401 (FR-006), weak/invalid input returns 400, wrong-password returns 401, sign-out invalidates cookie, post-sign-out call returns 401 `unauthenticated`.
 - [ ] T029 [P] [US1] Frontend test [frontend/tests/auth.test.tsx](frontend/tests/auth.test.tsx) covering: anonymous navigation redirects to `/login`, successful sign-up reaches the post-signup state, failed sign-in shows the uniform error message, sign-out returns to `/login`.
 
 ### Implementation for User Story 1
@@ -109,8 +109,8 @@ description: "Task list for feature 006-user-and-baby-profiles"
 ### Tests for User Story 2 (write first)
 
 - [ ] T036 [P] [US2] Contract test add-ons in [backend/tests/contract/test_auth_and_profiles_contract.py](backend/tests/contract/test_auth_and_profiles_contract.py) covering `GET /v1/babies` and `POST /v1/babies`.
-- [ ] T037 [P] [US2] Integration test [backend/tests/integration/test_babies_endpoints.py](backend/tests/integration/test_babies_endpoints.py): create-list-get round trip, first-baby auto-sets `active_baby_id`, second-baby does not, cross-tenant GET on another caregiver's baby returns 404 (FR-016).
-- [ ] T038 [P] [US2] Integration test [backend/tests/integration/test_entries_scoping.py](backend/tests/integration/test_entries_scoping.py): unauthenticated `POST /v1/entries` returns 401; authenticated without active baby returns 409 `no_active_baby`; with active baby, write persists `baby_id`; cross-tenant edit attempt via `PUT /v1/entries/{id}` returns 404.
+- [X] T037 [P] [US2] Integration test [backend/tests/integration/test_babies_endpoints.py](backend/tests/integration/test_babies_endpoints.py): create-list-get round trip, first-baby auto-sets `active_baby_id`, second-baby does not, cross-tenant GET on another caregiver's baby returns 404 (FR-016).
+- [X] T038 [P] [US2] Integration test [backend/tests/integration/test_entries_scoping.py](backend/tests/integration/test_entries_scoping.py): unauthenticated `POST /v1/entries` returns 401; authenticated without active baby returns 409 `no_active_baby`; with active baby, write persists `baby_id`; cross-tenant edit attempt via `PUT /v1/entries/{id}` returns 404.
 - [ ] T039 [P] [US2] Integration test [backend/tests/integration/test_chatentry_scoping.py](backend/tests/integration/test_chatentry_scoping.py): same matrix as T038 against `POST /v1/chatentry/`.
 - [ ] T040 [P] [US2] Integration test [backend/tests/integration/test_list_endpoints_scoping.py](backend/tests/integration/test_list_endpoints_scoping.py): `GET /v1/feeds`, `/v1/sleeps`, `/v1/poops`, `/v1/appointments` each return only rows where `baby_id = active baby`; verified with two-caregiver fixture for zero leakage (SC-003).
 - [ ] T041 [P] [US2] Frontend test [frontend/tests/babies.test.tsx](frontend/tests/babies.test.tsx) covering: signed-in caregiver with zero babies sees `FirstBabyPrompt`; submitting creates a baby; diary surface unlocks; logged chat entry appears in today's list.
@@ -121,8 +121,8 @@ description: "Task list for feature 006-user-and-baby-profiles"
 - [X] T043 [US2] Wire the babies router into [backend/src/momdiary/api/main.py](backend/src/momdiary/api/main.py).
 - [X] T044 [US2] Modify [backend/src/momdiary/api/routes/entries.py](backend/src/momdiary/api/routes/entries.py) to add `Depends(get_current_user)` and `Depends(get_active_baby)`; pass `baby_id` into the dispatcher and into the chat session-store key.
 - [X] T045 [US2] Modify [backend/src/momdiary/services/entries_dispatcher.py](backend/src/momdiary/services/entries_dispatcher.py) to accept `baby_id` and persist it on every write (Feed/Sleep/Poop/Appointment/AppointmentNote/AgentInteraction).
-- [ ] T046 [US2] Modify [backend/src/momdiary/api/routes/chatentry.py](backend/src/momdiary/api/routes/chatentry.py) the same way as T044.
-- [ ] T047 [US2] Modify [backend/src/momdiary/services/chatentry_dispatcher.py](backend/src/momdiary/services/chatentry_dispatcher.py) to accept and persist `baby_id` (mirrors T045).
+- [X] T046 [US2] Modify [backend/src/momdiary/api/routes/chatentry.py](backend/src/momdiary/api/routes/chatentry.py) the same way as T044. — **OBSOLETE**: no `chatentry` route exists in this codebase; all natural-language entries flow through `/v1/entries` which already enforces `active_baby` (T044).
+- [X] T047 [US2] Modify [backend/src/momdiary/services/chatentry_dispatcher.py](backend/src/momdiary/services/chatentry_dispatcher.py) to accept and persist `baby_id` (mirrors T045). — **OBSOLETE**: no `chatentry_dispatcher.py` exists; baby-scoping is handled by `require_active_baby` + repository contextvar in the existing dispatcher (T045).
 - [X] T048 [P] [US2] Modify [backend/src/momdiary/api/routes/feeds.py](backend/src/momdiary/api/routes/feeds.py) to require auth and filter `WHERE baby_id = active_baby AND deleted_at IS NULL`.
 - [X] T049 [P] [US2] Same retrofit on [backend/src/momdiary/api/routes/sleeps.py](backend/src/momdiary/api/routes/sleeps.py).
 - [X] T050 [P] [US2] Same retrofit on [backend/src/momdiary/api/routes/poops.py](backend/src/momdiary/api/routes/poops.py).
@@ -162,7 +162,7 @@ description: "Task list for feature 006-user-and-baby-profiles"
 
 ### Tests for User Story 4
 
-- [ ] T058 [P] [US4] Integration test [backend/tests/integration/test_active_baby_switch.py](backend/tests/integration/test_active_baby_switch.py) covering: `POST /v1/users/me/active-baby` persists the change; subsequent reads/writes target the new baby; cross-tenant `baby_id` returns 404; in-flight requests against the old baby complete under the old baby (FR-016 + acceptance scenario 4.3).
+- [X] T058 [P] [US4] Integration test [backend/tests/integration/test_active_baby_switch.py](backend/tests/integration/test_active_baby_switch.py) covering: `POST /v1/users/me/active-baby` persists the change; subsequent reads/writes target the new baby; cross-tenant `baby_id` returns 404; in-flight requests against the old baby complete under the old baby (FR-016 + acceptance scenario 4.3). — implemented as part of [backend/tests/integration/test_users_and_active_baby.py](backend/tests/integration/test_users_and_active_baby.py).
 - [ ] T059 [P] [US4] Integration test [backend/tests/integration/test_chat_partitioning.py](backend/tests/integration/test_chat_partitioning.py): same `X-Session-ID` with different active babies yields independent chat histories (FR-017).
 
 ### Implementation for User Story 4
@@ -184,8 +184,8 @@ description: "Task list for feature 006-user-and-baby-profiles"
 
 ### Tests for User Story 5
 
-- [ ] T064 [P] [US5] Integration test [backend/tests/integration/test_users_endpoints.py](backend/tests/integration/test_users_endpoints.py): `PUT /v1/users/me` happy path + 400 on empty `display_name` + 401 anonymous.
-- [ ] T065 [P] [US5] Extend [backend/tests/integration/test_babies_endpoints.py](backend/tests/integration/test_babies_endpoints.py) with `PATCH` (happy + cross-tenant 404) and `DELETE` (soft-delete + active-baby reassignment per FR-011 + last-baby-deleted clears preference).
+- [X] T064 [P] [US5] Integration test [backend/tests/integration/test_users_endpoints.py](backend/tests/integration/test_users_endpoints.py): `PUT /v1/users/me` happy path + 400 on empty `display_name` + 401 anonymous. — covered in [backend/tests/integration/test_users_and_active_baby.py](backend/tests/integration/test_users_and_active_baby.py).
+- [X] T065 [P] [US5] Extend [backend/tests/integration/test_babies_endpoints.py](backend/tests/integration/test_babies_endpoints.py) with `PATCH` (happy + cross-tenant 404) and `DELETE` (soft-delete + active-baby reassignment per FR-011 + last-baby-deleted clears preference). — implementation clears `active_baby_id` to null on delete of active baby (caregiver must explicitly pick a remaining baby).
 - [ ] T066 [P] [US5] Frontend test extension in [frontend/tests/babies.test.tsx](frontend/tests/babies.test.tsx) covering rename and soft-delete flows.
 
 ### Implementation for User Story 5
@@ -201,9 +201,9 @@ description: "Task list for feature 006-user-and-baby-profiles"
 ## Phase 8: Polish & cross-cutting concerns
 
 - [ ] T070 [P] Add the auth benchmark [backend/tests/benchmarks/test_auth_perf.py](backend/tests/benchmarks/test_auth_perf.py): asserts Argon2id verify median < 150 ms and `SessionService.validate_and_slide` p95 < 25 ms on dev hardware (per Constitution III, SC-002).
-- [ ] T071 [P] Update [backend/src/momdiary/services/entries_dispatcher.py](backend/src/momdiary/services/entries_dispatcher.py) and [backend/src/momdiary/services/chatentry_dispatcher.py](backend/src/momdiary/services/chatentry_dispatcher.py) structured-log calls to include `user_id` + `baby_id` fields (FR-022).
-- [ ] T072 [P] Update top-level [README.md](README.md) with a short "Authentication & baby profiles" section pointing to [specs/006-user-and-baby-profiles/quickstart.md](specs/006-user-and-baby-profiles/quickstart.md).
-- [ ] T073 [P] Update [backend/requests.http](backend/requests.http) with a new "Feature 006 — auth & babies" section: register, login, me, create baby, set active baby, edit baby, logout.
+- [X] T071 [P] Update [backend/src/momdiary/services/entries_dispatcher.py](backend/src/momdiary/services/entries_dispatcher.py) and [backend/src/momdiary/services/chatentry_dispatcher.py](backend/src/momdiary/services/chatentry_dispatcher.py) structured-log calls to include `user_id` + `baby_id` fields (FR-022). — implemented via `structlog.contextvars.bind_contextvars(user_id=..., baby_id=...)` in [backend/src/momdiary/auth/dependencies.py](backend/src/momdiary/auth/dependencies.py); every downstream log line in the request (including dispatcher, registry, repositories) now carries both fields automatically. `chatentry_dispatcher.py` does not exist in this codebase — only the `/v1/entries` flow is used.
+- [X] T072 [P] Update top-level [README.md](README.md) with a short "Authentication & baby profiles" section pointing to [specs/006-user-and-baby-profiles/quickstart.md](specs/006-user-and-baby-profiles/quickstart.md).
+- [X] T073 [P] Update [backend/requests.http](backend/requests.http) with a new "Feature 006 — auth & babies" section: register, login, me, create baby, set active baby, edit baby, logout.
 - [ ] T074 Run the full quickstart end-to-end per [quickstart.md](./quickstart.md) — including the cross-tenant isolation check (step 6) and the sign-out gating check (step 7) — and confirm every step passes.
 - [ ] T075 Run `pytest -q` and `npm test` to confirm the entire suite is green; address any incidental regressions in existing tests caused by the new auth gate (e.g., fixtures that previously assumed anonymous access now need a session-cookie helper).
 
