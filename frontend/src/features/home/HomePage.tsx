@@ -23,7 +23,7 @@ import type {
 // -----------------------------------------------------------------------------
 // HomePage — dashboard view matching the Home.jpeg mockup.
 //
-// Layout: header (greeting + baby name + "Ask AI" pill + bell) → stats card
+// Layout: header (greeting + baby name + bell) → stats card
 // (Last feed / Sleep today / Next appt) → Quick log grid (Feed, Sleep, Poop,
 // Appt, + More — Bath intentionally omitted per product) → Recent logs list →
 // floating chat bubble (existing ChatPanel) → bottom tab bar (Home active).
@@ -68,12 +68,7 @@ export function HomePage({
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
-      <HomeHeader
-        babyName={babyName}
-        onAskAI={() => {
-          onOpenChat();
-        }}
-      />
+      <HomeHeader babyName={babyName} />
       <StatsCard
         feeds={feeds.data?.items ?? []}
         sleeps={sleeps.data?.items ?? []}
@@ -111,7 +106,7 @@ function greeting(): string {
   return "Good evening";
 }
 
-function HomeHeader(props: { babyName: string; onAskAI: () => void }): JSX.Element {
+function HomeHeader(props: { babyName: string }): JSX.Element {
   return (
     <header className="flex items-start justify-between gap-3">
       <div className="flex flex-col">
@@ -121,15 +116,6 @@ function HomeHeader(props: { babyName: string; onAskAI: () => void }): JSX.Eleme
         </h1>
       </div>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={props.onAskAI}
-          className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-800 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
-          aria-label="Ask AI"
-        >
-          <SparkleIcon className="h-4 w-4 text-amber-500" />
-          Ask AI
-        </button>
         <button
           type="button"
           className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-600 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
@@ -520,14 +506,6 @@ function shortFeed(t: string): string {
 // -----------------------------------------------------------------------------
 
 type IconProps = { className?: string };
-
-function SparkleIcon({ className }: IconProps): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M12 2l1.8 4.6L18.4 8 13.8 9.8 12 14.4 10.2 9.8 5.6 8 10.2 6.6 12 2zm6 11l1 2.5L21.5 17 19 18l-1 2.5L17 18l-2.5-1L17 16l1-2.5z" />
-    </svg>
-  );
-}
 
 function BellIcon({ className }: IconProps): JSX.Element {
   return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessageList } from "./ChatMessageList";
 import { useChatContext } from "./ChatContext";
 interface ChatPanelProps {
@@ -249,13 +249,64 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
   const { messages, inFlight, draft, setDraft, submit } = useChatContext();
   const autoSend = true;
   const [voiceMode, setVoiceMode] = useState(false);
+  // Diary submissions go to /v1/entries (the existing agent dispatcher);
+  // research submissions go to the placeholder /v1/research stub. See
+  // `useChat.submit` for the routing.
+  const [mode, setMode] = useState<ChatMode>("diary");
+  const modeCfg = MODE_CONFIG[mode];
+
+  // Per-mode history isolation. The underlying chat store keeps a single
+  // message stream (one session_id); we tag each message with the mode that
+  // was active when its turn started, then filter at render time. `Map` is
+  // stored in a ref because the tagging side-effect must not trigger re-renders.
+  const messageModeRef = useRef<Map<string, ChatMode>>(new Map());
+  // FIFO of modes for in-flight turns. `submitInMode` pushes the active mode
+  // before dispatching; the tagging effect peeks for the caregiver message
+  // and shifts when the assistant reply lands. This keeps a paired turn on
+  // the same mode even if the user switches mid-request.
+  const turnModeQueueRef = useRef<ChatMode[]>([]);
+
+  useEffect(() => {
+    for (const m of messages) {
+      if (messageModeRef.current.has(m.id)) continue;
+      if (m.role === "caregiver") {
+        const next = turnModeQueueRef.current[0] ?? mode;
+        messageModeRef.current.set(m.id, next);
+      } else {
+        const next = turnModeQueueRef.current.shift() ?? mode;
+        messageModeRef.current.set(m.id, next);
+      }
+    }
+  }, [messages, mode]);
+
+  const visibleMessages = useMemo(
+    () =>
+      messages.filter(
+        (m) => (messageModeRef.current.get(m.id) ?? "diary") === mode,
+      ),
+    [messages, mode],
+  );
+
+  // Show the typing indicator only when the in-flight turn belongs to the
+  // currently viewed mode.
+  const inFlightHere =
+    inFlight && (turnModeQueueRef.current[0] ?? mode) === mode;
+
+  const submitInMode = useCallback(
+    (text: string) => {
+      if (!text.trim() || inFlight) return;
+      turnModeQueueRef.current.push(mode);
+      void submit(text, mode);
+    },
+    [inFlight, mode, submit],
+  );
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      void submit(draft);
+      submitInMode(draft);
     },
-    [draft, submit],
+    [draft, submitInMode],
   );
 
   const handleTranscript = useCallback(
@@ -267,9 +318,9 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
 
   const handleFinal = useCallback(
     (text: string) => {
-      if (autoSend && text.trim().length > 0) void submit(text);
+      if (autoSend && text.trim().length > 0) submitInMode(text);
     },
-    [autoSend, submit],
+    [autoSend, submitInMode],
   );
 
   const { supported, listening, error: micError, start, stop } =
@@ -308,10 +359,9 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
 
   const sendQuick = useCallback(
     (text: string) => {
-      if (inFlight) return;
-      void submit(text);
+      submitInMode(text);
     },
-    [inFlight, submit],
+    [submitInMode],
   );
 
   return (
@@ -343,12 +393,37 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
               <>
                 <span className="text-emerald-600">● Online</span>
                 <span className="px-1 text-slate-300">·</span>
-                Mia's assistant
+                {modeCfg.subtitle}
               </>
             )}
           </span>
         </div>
       </header>
+
+      {/* Mode switcher */}
+      <div className="flex gap-1.5 border-b border-orange-100 bg-orange-50 px-3 py-2">
+        {(Object.keys(MODE_CONFIG) as ChatMode[]).map((m) => {
+          const cfg = MODE_CONFIG[m];
+          const active = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              aria-pressed={active}
+              className={
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium transition-colors " +
+                (active
+                  ? "bg-orange-500 text-white shadow-sm"
+                  : "border border-orange-200 bg-white text-orange-700 hover:bg-orange-100")
+              }
+            >
+              <cfg.Icon className="h-3.5 w-3.5" />
+              {cfg.label}
+            </button>
+          );
+        })}
+      </div>
 
       {voiceMode ? (
         <VoiceOverlay
@@ -356,11 +431,12 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
           listening={listening}
           error={micError}
           onCancel={cancelVoiceMode}
+          caption={modeCfg.voiceCaption}
         />
       ) : (
         <>
           {/* Scrollable messages */}
-          <ChatMessageList messages={messages} inFlight={inFlight} />
+          <ChatMessageList messages={visibleMessages} inFlight={inFlightHere} />
 
           {/* Mic error banner */}
           {micError ? (
@@ -373,7 +449,7 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
 
           {/* Quick reply chips */}
           <div className="flex flex-wrap gap-2 border-orange-100 border-t bg-orange-50 px-3 py-2">
-            {QUICK_REPLIES.map((q) => (
+            {modeCfg.chips.map((q) => (
               <button
                 key={q}
                 type="button"
@@ -385,6 +461,16 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
               </button>
             ))}
           </div>
+
+          {/* Research disclaimer */}
+          {mode === "research" ? (
+            <div className="flex items-start gap-2 border-orange-100 border-t bg-amber-50 px-3 py-1.5">
+              <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <p className="text-[11px] text-amber-800">
+                General info from the web — not medical advice.
+              </p>
+            </div>
+          ) : null}
 
           {/* Input row */}
           <form
@@ -409,12 +495,12 @@ export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
               onChange={(e) => setDraft(e.target.value)}
               readOnly={inFlight}
               rows={1}
-              placeholder="Type a message…"
+              placeholder={modeCfg.placeholder}
               className="flex-1 resize-none rounded-full border border-orange-200 bg-white px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-300"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void submit(draft);
+                  submitInMode(draft);
                 }
               }}
             />
@@ -438,15 +524,17 @@ function VoiceOverlay({
   listening,
   error,
   onCancel,
+  caption,
 }: {
   transcript: string;
   listening: boolean;
   error: string | null;
   onCancel: () => void;
+  caption: string;
 }): JSX.Element {
   return (
     <div className="flex flex-1 flex-col items-center justify-between bg-orange-50 px-6 py-6">
-      <p className="text-sm text-slate-500">Speak your command…</p>
+      <p className="text-sm text-slate-500">{caption}</p>
 
       {/* Pulsing mic */}
       <div className="relative grid h-40 w-40 place-items-center">
@@ -518,12 +606,40 @@ const WAVEFORM_BARS: ReadonlyArray<{ h: string; d: string }> = [
   { h: "h-3", d: "-1.65s" },
 ];
 
-const QUICK_REPLIES: readonly string[] = [
-  "Log a nap",
-  "Last feed?",
-  "Book appt",
-  "Poop summary",
-] as const;
+type ChatMode = "diary" | "research";
+
+interface ModeConfig {
+  label: string;
+  subtitle: string;
+  placeholder: string;
+  voiceCaption: string;
+  chips: readonly string[];
+  Icon: (props: { className?: string }) => JSX.Element;
+}
+
+const MODE_CONFIG: Record<ChatMode, ModeConfig> = {
+  diary: {
+    label: "Diary",
+    subtitle: "Baby's diary assistant",
+    placeholder: "Log or ask about your baby…",
+    voiceCaption: "Speak about your baby…",
+    chips: ["Log a nap", "Just fed 5 min", "Last feed?", "How did she sleep?"],
+    Icon: SparkleIcon,
+  },
+  research: {
+    label: "Research",
+    subtitle: "Web research",
+    placeholder: "Search the web about babies…",
+    voiceCaption: "Researching the web…",
+    chips: [
+      "Safe sleep at 4 mo",
+      "Teething tips",
+      "Tummy time ideas",
+      "Starting solids",
+    ],
+    Icon: GlobeIcon,
+  },
+};
 
 function BackIcon({ className }: { className?: string }): JSX.Element {
   return (
@@ -574,6 +690,45 @@ function SendIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
       <path d="M3 20l18-8L3 4l3 8-3 8z" />
+    </svg>
+  );
+}
+
+function GlobeIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 010 18" />
+      <path d="M12 3a14 14 0 000 18" />
+    </svg>
+  );
+}
+
+function InfoIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8h.01" />
+      <path d="M11 12h1v5h1" />
     </svg>
   );
 }

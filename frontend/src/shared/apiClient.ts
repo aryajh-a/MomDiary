@@ -19,6 +19,8 @@ import {
   type PoopCreate,
   type PoopUpdate,
   type RegisterRequest,
+  type ResearchRequest,
+  type ResearchResponse,
   type SetActiveBabyRequest,
   type SleepEntry,
   type SleepListResponse,
@@ -38,6 +40,7 @@ import {
   okResponseSchema,
   poopEntrySchema,
   poopListResponseSchema,
+  researchResponseSchema,
   sleepEntrySchema,
   sleepListResponseSchema,
 } from "./types";
@@ -276,6 +279,8 @@ export const apiClient = {
     ),
   postEntry: (body: AgentWriteRequest): Promise<AgentWriteResponse> =>
     request(`/v1/entries`, { method: "POST", body: JSON.stringify(body) }, agentWriteResponseSchema),
+  postResearch: (body: ResearchRequest): Promise<ResearchResponse> =>
+    request(`/v1/research`, { method: "POST", body: JSON.stringify(body) }, researchResponseSchema),
 
   // ---- direct per-entry create (quick-log) ----
   createFeed: (body: FeedCreate): Promise<FeedEntry> =>

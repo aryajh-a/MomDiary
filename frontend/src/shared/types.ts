@@ -230,6 +230,28 @@ export const agentWriteResponseSchema = z.discriminatedUnion("outcome", [
 ]);
 export type AgentWriteResponse = z.infer<typeof agentWriteResponseSchema>;
 
+// ---------- Research (placeholder) ----------
+
+export const researchSourceSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+});
+export type ResearchSource = z.infer<typeof researchSourceSchema>;
+
+export const researchResponseSchema = z.object({
+  outcome: z.literal("research_answer"),
+  agent_message: z.string(),
+  sources: z.array(researchSourceSchema),
+  correlation_id: correlationId,
+  session_id: z.string().optional(),
+});
+export type ResearchResponse = z.infer<typeof researchResponseSchema>;
+
+export interface ResearchRequest {
+  message: string;
+  correlation_id?: string;
+}
+
 // ---------- Errors ----------
 
 export const errorBodySchema = z.object({

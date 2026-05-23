@@ -2,9 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useReducer } from "react";
 import { ApiError, apiClient } from "@/shared/apiClient";
 import { entryTypeToSection } from "@/shared/queryKeys";
-import type { AgentWriteResponse } from "@/shared/types";
+import type { AgentWriteResponse, ResearchResponse } from "@/shared/types";
 import { chatReducer } from "./reducer";
 import { INITIAL_CHAT, type ChatMessage } from "./types";
+
+export type ChatSubmitMode = "diary" | "research";
 
 function makeId(): string {
   const g = globalThis.crypto;
@@ -16,8 +18,11 @@ export function useChat() {
   const [state, dispatch] = useReducer(chatReducer, INITIAL_CHAT);
   const qc = useQueryClient();
 
-  const mutation = useMutation({
+  const diaryMutation = useMutation({
     mutationFn: (message: string) => apiClient.postEntry({ message }),
+  });
+  const researchMutation = useMutation({
+    mutationFn: (message: string) => apiClient.postResearch({ message }),
   });
 
   const setDraft = useCallback((value: string) => {
@@ -25,7 +30,7 @@ export function useChat() {
   }, []);
 
   const submit = useCallback(
-    async (rawDraft: string) => {
+    async (rawDraft: string, mode: ChatSubmitMode = "diary") => {
       const draft = rawDraft.trim();
       if (!draft || state.inFlight) return;
 
@@ -38,7 +43,24 @@ export function useChat() {
       dispatch({ type: "submit", userMessage });
 
       try {
-        const response: AgentWriteResponse = await mutation.mutateAsync(draft);
+        if (mode === "research") {
+          const response: ResearchResponse = await researchMutation.mutateAsync(draft);
+          const sourcesText = response.sources.length
+            ? "\n\nSources:\n" +
+              response.sources.map((s, i) => `${i + 1}. ${s.title} — ${s.url}`).join("\n")
+            : "";
+          const assistantMessage: ChatMessage = {
+            id: makeId(),
+            role: "assistant",
+            text: response.agent_message + sourcesText,
+            ts: Date.now(),
+            correlation_id: response.correlation_id,
+          };
+          dispatch({ type: "success", assistantMessage });
+          return;
+        }
+
+        const response: AgentWriteResponse = await diaryMutation.mutateAsync(draft);
         const assistantMessage: ChatMessage = {
           id: makeId(),
           role: "assistant",
@@ -67,7 +89,9 @@ export function useChat() {
           id: makeId(),
           role: "assistant",
           text:
-            "Something went wrong saving that — please try again. If it keeps happening, share the correlation ID below.",
+            mode === "research"
+              ? "Couldn't reach the research service — please try again."
+              : "Something went wrong saving that — please try again. If it keeps happening, share the correlation ID below.",
           ts: Date.now(),
           correlation_id: apiErr?.correlationId,
           error: {
@@ -78,7 +102,7 @@ export function useChat() {
         dispatch({ type: "error", assistantMessage, preservedDraft: draft });
       }
     },
-    [state.inFlight, mutation, qc],
+    [state.inFlight, diaryMutation, researchMutation, qc],
   );
 
   return {

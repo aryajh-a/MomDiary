@@ -76,6 +76,7 @@ def create_app() -> FastAPI:
         entries,
         feeds,
         poops,
+        research,
         sleeps,
         users,
     )
@@ -88,7 +89,8 @@ def create_app() -> FastAPI:
     app.include_router(sleeps.router, prefix="/v1")
     app.include_router(poops.router, prefix="/v1")
     app.include_router(appointments.router, prefix="/v1")
-    logger.info("app.routers_registered", count=8)
+    app.include_router(research.router, prefix="/v1")
+    logger.info("app.routers_registered", count=9)
     return app
 
 
