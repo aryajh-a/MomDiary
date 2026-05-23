@@ -166,3 +166,30 @@ class AppointmentUpdate(_StrictModel):
 
 class AppointmentNoteCreate(_StrictModel):
     body: Annotated[str, Field(min_length=1, max_length=2000)]
+
+
+# ---------------------------------------------------------------------------
+# Direct POST bodies (feature 006 — quick-log from the UI)
+# ---------------------------------------------------------------------------
+
+
+class FeedCreate(_StrictModel):
+    feed_type: FeedType
+    quantity: Annotated[float, Field(gt=0)]
+    unit: FeedUnit
+    occurred_at: datetime
+
+
+class SleepCreate(_StrictModel):
+    start_at: datetime
+    end_at: datetime
+
+
+class PoopCreate(_StrictModel):
+    occurred_at: datetime
+    consistency: PoopConsistency
+
+
+class AppointmentCreate(_StrictModel):
+    scheduled_at: datetime
+    note: Annotated[str, Field(min_length=1, max_length=2000)] | None = None

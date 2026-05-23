@@ -8,6 +8,7 @@ import {
   type BabyCreate,
   type BabyListResponse,
   type BabyUpdate,
+  type FeedCreate,
   type FeedEntry,
   type FeedListResponse,
   type FeedUpdate,
@@ -272,6 +273,10 @@ export const apiClient = {
     ),
   postEntry: (body: AgentWriteRequest): Promise<AgentWriteResponse> =>
     request(`/v1/entries`, { method: "POST", body: JSON.stringify(body) }, agentWriteResponseSchema),
+
+  // ---- direct per-entry create (quick-log) ----
+  createFeed: (body: FeedCreate): Promise<FeedEntry> =>
+    request(`/v1/feeds`, { method: "POST", body: JSON.stringify(body) }, feedEntrySchema),
 
   // ---- direct per-entry edit/delete ----
   updateFeed: (id: number, body: FeedUpdate): Promise<FeedEntry> =>

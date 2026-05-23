@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date as date_cls
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.dependencies import ActiveBabyDep
@@ -15,6 +15,7 @@ from momdiary.db.repositories.appointments import (
     AppointmentValidationError,
 )
 from momdiary.models.schemas import (
+    AppointmentCreate,
     AppointmentEntry,
     AppointmentListResponse,
     AppointmentNote,
@@ -46,6 +47,30 @@ def _to_entry(r) -> AppointmentEntry:
             "updated_at": r.updated_at,
         }
     )
+
+
+@router.post(
+    "/appointments", response_model=AppointmentEntry, status_code=status.HTTP_201_CREATED
+)
+async def create_appointment(
+    body: AppointmentCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    baby: ActiveBabyDep,
+) -> AppointmentEntry:
+    repo = AppointmentsRepository(session)
+    try:
+        row = await repo.create_appointment(
+            scheduled_at=_to_iso(body.scheduled_at),
+            note=body.note,
+        )
+    except AppointmentValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(exc)},
+        ) from exc
+    await session.commit()
+    logger.info("appointments.post", entry_id=row.id, baby_id=baby.id)
+    return _to_entry(row)
 
 
 @router.get("/appointments", response_model=AppointmentListResponse)
@@ -91,7 +116,11 @@ async def update_appointment(
     return _to_entry(row)
 
 
-@router.delete("/appointments/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/appointments/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_appointment(
     entry_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],

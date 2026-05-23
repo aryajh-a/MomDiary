@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatMessageList } from "./ChatMessageList";
-import { useChat } from "./useChat";
+import { useChatContext } from "./ChatContext";
 
 interface ChatPanelProps {
   onHide?: () => void;
@@ -155,7 +155,7 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
 // -----------------------------------------------------------------------------
 
 export function ChatPanel({ onHide }: ChatPanelProps = {}): JSX.Element {
-  const { messages, inFlight, draft, setDraft, submit } = useChat();
+  const { messages, inFlight, draft, setDraft, submit } = useChatContext();
   const [autoSend, setAutoSend] = useState(true);
 
   const onSubmit = useCallback(

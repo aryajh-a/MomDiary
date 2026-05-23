@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import date as date_cls
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.dependencies import ActiveBabyDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.feeds import FeedsRepository, FeedValidationError
-from momdiary.models.schemas import FeedEntry, FeedListResponse, FeedUpdate
+from momdiary.models.schemas import FeedCreate, FeedEntry, FeedListResponse, FeedUpdate
 from momdiary.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,6 +35,30 @@ def _to_entry(r) -> FeedEntry:
             "updated_at": r.updated_at,
         }
     )
+
+
+@router.post("/feeds", response_model=FeedEntry, status_code=status.HTTP_201_CREATED)
+async def create_feed(
+    body: FeedCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    baby: ActiveBabyDep,
+) -> FeedEntry:
+    repo = FeedsRepository(session)
+    try:
+        row = await repo.create(
+            feed_type=body.feed_type,
+            quantity=body.quantity,
+            unit=body.unit,
+            occurred_at=_to_iso(body.occurred_at),
+        )
+    except FeedValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(exc)},
+        ) from exc
+    await session.commit()
+    logger.info("feeds.post", entry_id=row.id, baby_id=baby.id)
+    return _to_entry(row)
 
 
 @router.get("/feeds", response_model=FeedListResponse)
@@ -79,7 +103,11 @@ async def update_feed(
     return _to_entry(row)
 
 
-@router.delete("/feeds/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/feeds/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_feed(
     entry_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],

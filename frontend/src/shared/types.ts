@@ -119,6 +119,18 @@ export const appointmentUpdateSchema = z
   .strict();
 export type AppointmentUpdate = z.infer<typeof appointmentUpdateSchema>;
 
+// ---------- Direct POST body (feed quick-log) ----------
+
+export const feedCreateSchema = z
+  .object({
+    feed_type: feedTypeSchema,
+    quantity: z.number().positive(),
+    unit: feedUnitSchema,
+    occurred_at: isoString,
+  })
+  .strict();
+export type FeedCreate = z.infer<typeof feedCreateSchema>;
+
 // ---------- Agent write envelope ----------
 
 export const agentWriteRequestSchema = z.object({

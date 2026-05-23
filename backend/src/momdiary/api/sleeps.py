@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date as date_cls
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.dependencies import ActiveBabyDep
@@ -15,7 +15,7 @@ from momdiary.db.repositories.sleeps import (
     SleepValidationError,
     duration_minutes,
 )
-from momdiary.models.schemas import SleepEntry, SleepListResponse, SleepUpdate
+from momdiary.models.schemas import SleepCreate, SleepEntry, SleepListResponse, SleepUpdate
 from momdiary.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -38,6 +38,28 @@ def _to_entry(r) -> SleepEntry:
             "updated_at": r.updated_at,
         }
     )
+
+
+@router.post("/sleeps", response_model=SleepEntry, status_code=status.HTTP_201_CREATED)
+async def create_sleep(
+    body: SleepCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    baby: ActiveBabyDep,
+) -> SleepEntry:
+    repo = SleepsRepository(session)
+    try:
+        row = await repo.create(
+            start_at=_to_iso(body.start_at),
+            end_at=_to_iso(body.end_at),
+        )
+    except SleepValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(exc)},
+        ) from exc
+    await session.commit()
+    logger.info("sleeps.post", entry_id=row.id, baby_id=baby.id)
+    return _to_entry(row)
 
 
 @router.get("/sleeps", response_model=SleepListResponse)
@@ -80,7 +102,11 @@ async def update_sleep(
     return _to_entry(row)
 
 
-@router.delete("/sleeps/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/sleeps/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_sleep(
     entry_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],

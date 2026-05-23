@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import date as date_cls
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.dependencies import ActiveBabyDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.poops import PoopsRepository, PoopValidationError
-from momdiary.models.schemas import PoopEntry, PoopListResponse, PoopUpdate
+from momdiary.models.schemas import PoopCreate, PoopEntry, PoopListResponse, PoopUpdate
 from momdiary.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +33,28 @@ def _to_entry(r) -> PoopEntry:
             "updated_at": r.updated_at,
         }
     )
+
+
+@router.post("/poops", response_model=PoopEntry, status_code=status.HTTP_201_CREATED)
+async def create_poop(
+    body: PoopCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    baby: ActiveBabyDep,
+) -> PoopEntry:
+    repo = PoopsRepository(session)
+    try:
+        row = await repo.create(
+            occurred_at=_to_iso(body.occurred_at),
+            consistency=body.consistency,
+        )
+    except PoopValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(exc)},
+        ) from exc
+    await session.commit()
+    logger.info("poops.post", entry_id=row.id, baby_id=baby.id)
+    return _to_entry(row)
 
 
 @router.get("/poops", response_model=PoopListResponse)
@@ -75,7 +97,11 @@ async def update_poop(
     return _to_entry(row)
 
 
-@router.delete("/poops/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/poops/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_poop(
     entry_id: Annotated[int, Path(ge=1)],
     session: Annotated[AsyncSession, Depends(get_session)],

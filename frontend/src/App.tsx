@@ -1,16 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { AuthShell } from "@/features/auth/AuthShell";
 import { useLogoutMutation, useSession } from "@/features/auth/useSession";
 import { BabySwitcher } from "@/features/babies/BabySwitcher";
 import { FirstBabyPrompt } from "@/features/babies/FirstBabyPrompt";
-import { DateBar } from "@/features/date/DateBar";
-import { SelectedDateProvider, useSelectedDate } from "@/features/date/useSelectedDate";
-import { AppointmentsSection } from "@/features/appointments/AppointmentsSection";
-import { FeedsSection } from "@/features/feeds/FeedsSection";
-import { PoopsSection } from "@/features/poops/PoopsSection";
-import { SleepsSection } from "@/features/sleeps/SleepsSection";
-import { queryKeys } from "@/shared/queryKeys";
+import { ChatProvider } from "@/features/chat/ChatContext";
+import { SelectedDateProvider } from "@/features/date/useSelectedDate";
+import { FeedHistoryPage } from "@/features/home/FeedHistoryPage";
+import { HomePage } from "@/features/home/HomePage";
 
 const CHAT_VISIBLE_STORAGE_KEY = "momdiary.chatVisible";
 
@@ -18,41 +14,16 @@ const ChatPanel = lazy(() =>
   import("@/features/chat/ChatPanel").then((m) => ({ default: m.ChatPanel })),
 );
 
-const SECTION_KEYS = new Set(["feeds", "sleeps", "poops", "appointments"]);
-
-function RefreshButton(): JSX.Element {
-  const qc = useQueryClient();
-  const { date } = useSelectedDate();
-  const onClick = () => {
-    for (const key of queryKeys.allForDate(date)) {
-      qc.invalidateQueries({ queryKey: key });
-    }
-    qc.invalidateQueries({
-      predicate: (q) => typeof q.queryKey[0] === "string" && SECTION_KEYS.has(q.queryKey[0]),
-    });
-  };
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Refresh all sections"
-      className="rounded bg-slate-200 px-2 py-1 text-sm hover:bg-slate-300"
-    >
-      ⟳
-    </button>
-  );
-}
-
 function ProfileMenu(props: { displayName: string }): JSX.Element {
   const logout = useLogoutMutation();
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-slate-700">{props.displayName}</span>
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-slate-600">{props.displayName}</span>
       <button
         type="button"
         onClick={() => logout.mutate()}
         disabled={logout.isPending}
-        className="rounded bg-slate-200 px-2 py-1 hover:bg-slate-300 disabled:opacity-60"
+        className="rounded bg-white px-2 py-1 text-slate-700 ring-1 ring-slate-200 hover:bg-amber-50 disabled:opacity-60"
       >
         {logout.isPending ? "…" : "Sign out"}
       </button>
@@ -65,10 +36,15 @@ function AppShell(props: {
   activeBabyId: number;
 }): JSX.Element {
   const [chatVisible, setChatVisible] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const stored = window.localStorage.getItem(CHAT_VISIBLE_STORAGE_KEY);
-    return stored === null ? true : stored === "true";
+    return stored === "true";
   });
+
+  // Drives the in-app "page" the caregiver sees. We deliberately keep this in
+  // local state (no router) — the app is currently a single-pane mobile flow
+  // and adding react-router for one drill-down would be over-engineering.
+  const [view, setView] = useState<"home" | "feedHistory">("home");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -79,27 +55,27 @@ function AppShell(props: {
   const showChat = useCallback(() => setChatVisible(true), []);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 p-4 pb-24">
-      <header className="relative flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">MomDiary</h1>
-          <ProfileMenu displayName={props.displayName} />
-        </div>
-        <div className="flex items-center justify-between">
-          <BabySwitcher activeBabyId={props.activeBabyId} />
-          <div className="flex items-center gap-2">
-            <DateBar />
-            <RefreshButton />
-          </div>
-        </div>
-      </header>
-      <FeedsSection />
-      <SleepsSection />
-      <PoopsSection />
-      <AppointmentsSection />
+    <div className="min-h-screen bg-amber-50">
+      {/* Small utility strip above the home view so the caregiver can still
+          switch babies and sign out without leaving the dashboard. */}
+      <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 pt-3">
+        <BabySwitcher activeBabyId={props.activeBabyId} />
+        <ProfileMenu displayName={props.displayName} />
+      </div>
+
+      {view === "home" ? (
+        <HomePage
+          activeBabyId={props.activeBabyId}
+          onOpenChat={showChat}
+          onOpenFeedHistory={() => setView("feedHistory")}
+        />
+      ) : (
+        <FeedHistoryPage onBack={() => setView("home")} />
+      )}
+
       {chatVisible ? (
         <div
-          className="fixed right-4 bottom-4 z-20 w-[min(calc(100vw-2rem),26rem)] origin-bottom-right animate-[chatPop_180ms_ease-out]"
+          className="fixed right-4 bottom-20 z-30 w-[min(calc(100vw-2rem),26rem)] origin-bottom-right animate-[chatPop_180ms_ease-out]"
           role="dialog"
           aria-label="Chat"
         >
@@ -112,12 +88,12 @@ function AppShell(props: {
           type="button"
           onClick={showChat}
           aria-label="Show chat"
-          className="fixed right-4 bottom-4 z-20 rounded-full bg-slate-900 px-4 py-3 text-sm text-white shadow-lg hover:bg-slate-700"
+          className="fixed right-4 bottom-20 z-30 grid h-14 w-14 place-items-center rounded-full bg-amber-500 text-2xl text-white shadow-lg ring-4 ring-amber-200 hover:bg-amber-600"
         >
-          💬 Chat
+          💬
         </button>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -139,7 +115,9 @@ function AuthGate(): JSX.Element {
 
   return (
     <SelectedDateProvider>
-      <AppShell displayName={user.display_name} activeBabyId={user.active_baby_id} />
+      <ChatProvider>
+        <AppShell displayName={user.display_name} activeBabyId={user.active_baby_id} />
+      </ChatProvider>
     </SelectedDateProvider>
   );
 }
