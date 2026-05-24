@@ -59,14 +59,21 @@ async def retention_setup(
 
 
 def _script_log_feed(agent: ScriptedAgent, n: int) -> None:
-    """Queue `n` log_feed calls — one per HTTP POST."""
+    """Queue `n` log_feed calls — one per HTTP POST.
+
+    Each scripted call uses a distinct `occurred_at` minute so the
+    server-side same-minute dedup in `log_feed` does not collapse them
+    into updates (this test is about session retention, not dedup).
+    """
     for i in range(n):
+        minute = i % 60
+        hour = 8 + (i // 60)
         agent.script(
             "log_feed",
             feed_type="formula",
             quantity=100 + i,
             unit="ml",
-            occurred_at="2026-05-16T08:00:00-07:00",
+            occurred_at=f"2026-05-16T{hour:02d}:{minute:02d}:00-07:00",
         )
 
 

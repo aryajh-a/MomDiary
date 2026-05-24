@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # Conservative under the gpt-4.1 16K context window.
     momdiary_session_prompt_token_budget: int = Field(default=12_000)
 
+    # Intent router. When False, MAFAgentRunner bypasses the IntentRouter
+    # entirely and every request runs with the full tool list. Useful for
+    # A/B comparison, eval baselines, or debugging when routing is
+    # suspected of being wrong.
+    momdiary_intent_router_enabled: bool = Field(default=True)
+
     # Auth / cookie settings (feature 006).
     momdiary_session_cookie_name: str = Field(default="momdiary_session")
     momdiary_session_cookie_ttl_days: int = Field(default=30)

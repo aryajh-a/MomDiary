@@ -57,7 +57,9 @@ def fake_agent(monkeypatch: pytest.MonkeyPatch) -> _FakeAgent:
         maf_runner_module, "build_agent", lambda tools=None: _FakeBundle(agent=agent)
     )
     monkeypatch.setattr(
-        maf_runner_module, "_build_tool_wrappers", lambda session, captured: []
+        maf_runner_module,
+        "_build_tool_wrappers",
+        lambda session, captured, *, allowed_tools=None: [],
     )
     monkeypatch.setattr(
         maf_runner_module, "get_default_timezone", _stub_get_default_timezone

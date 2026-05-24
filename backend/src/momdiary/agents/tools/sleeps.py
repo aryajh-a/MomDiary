@@ -6,9 +6,17 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.tools._dedup import find_same_minute
 from momdiary.db.repositories.sleeps import SleepsRepository, duration_minutes
 from momdiary.models.orm import Sleep
 from momdiary.models.schemas import SleepEntry
+from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import (
+    get_default_timezone,
+    parse_iso_with_offset,
+)
+
+logger = get_logger(__name__)
 
 
 def _to_entry(row: Sleep) -> dict:
@@ -44,6 +52,44 @@ async def log_sleep(
 ) -> AgentRunResult:
     args = LogSleepArgs(start_at=start_at, end_at=end_at)
     repo = SleepsRepository(session)
+
+    # Same-minute dedup on start_at -> route to update_sleep automatically.
+    # Sleeps are unique by start time (per prior prompt invariant).
+    try:
+        target_local_date = (
+            parse_iso_with_offset(args.start_at)
+            .astimezone(await get_default_timezone(session))
+            .date()
+        )
+        existing = await repo.list_by_start_date(target_local_date)
+        dup = find_same_minute(existing, args.start_at, lambda r: r.start_at)
+    except ValueError:
+        dup = None
+
+    if dup is not None:
+        logger.info(
+            "sleeps.log.deduped_to_update",
+            existing_id=dup.id,
+            start_at=args.start_at,
+        )
+        row, unchanged = await repo.update(
+            dup.id, start_at=args.start_at, end_at=args.end_at
+        )
+        assert row is not None
+        return AgentRunResult(
+            selected_tool="log_sleep",
+            outcome="updated",
+            entry_type="sleep",
+            entry_id=row.id,
+            payload=_to_entry(row),
+            agent_message=(
+                "No changes were needed."
+                if unchanged
+                else f"Updated existing sleep ({duration_minutes(row)} minutes)."
+            ),
+            unchanged=unchanged,
+        )
+
     row = await repo.create(**args.model_dump())
     return AgentRunResult(
         selected_tool="log_sleep",

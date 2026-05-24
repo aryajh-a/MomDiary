@@ -6,9 +6,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.tools._dedup import find_same_minute
 from momdiary.db.repositories.appointments import AppointmentsRepository
 from momdiary.models.orm import Appointment
 from momdiary.models.schemas import AppointmentEntry, AppointmentNote
+from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import (
+    get_default_timezone,
+    parse_iso_with_offset,
+)
+
+logger = get_logger(__name__)
 
 
 def _to_entry(row: Appointment) -> dict:
@@ -53,6 +61,50 @@ async def log_appointment(
 ) -> AgentRunResult:
     args = LogAppointmentArgs(scheduled_at=scheduled_at, note=note)
     repo = AppointmentsRepository(session)
+
+    # Same-minute dedup -> route to update_appointment automatically. If
+    # the caller supplied a note, append it (notes are append-only, per
+    # the prompt's "never overwrite notes" rule).
+    try:
+        target_local_date = (
+            parse_iso_with_offset(args.scheduled_at)
+            .astimezone(await get_default_timezone(session))
+            .date()
+        )
+        existing = await repo.list_by_date(target_local_date)
+        dup = find_same_minute(existing, args.scheduled_at, lambda r: r.scheduled_at)
+    except ValueError:
+        dup = None
+
+    if dup is not None:
+        logger.info(
+            "appointments.log.deduped_to_update",
+            existing_id=dup.id,
+            scheduled_at=args.scheduled_at,
+            has_note=args.note is not None,
+        )
+        # Same-minute match: preserve the existing scheduled_at exactly
+        # (no second-level overwrite). Only mutate state if a new note
+        # was supplied — notes are append-only.
+        if args.note is not None:
+            row = await repo.add_note(dup.id, body=args.note)
+            assert row is not None
+            unchanged = False
+            message = "Updated existing appointment and appended note."
+        else:
+            row = dup
+            unchanged = True
+            message = "No changes were needed."
+        return AgentRunResult(
+            selected_tool="log_appointment",
+            outcome="updated",
+            entry_type="appointment",
+            entry_id=row.id,
+            payload=_to_entry(row),
+            agent_message=message,
+            unchanged=unchanged,
+        )
+
     row = await repo.create_appointment(
         scheduled_at=args.scheduled_at, note=args.note
     )

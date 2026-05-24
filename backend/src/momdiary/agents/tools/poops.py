@@ -8,9 +8,17 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.tools._dedup import find_same_minute
 from momdiary.db.repositories.poops import PoopsRepository
 from momdiary.models.orm import Poop
 from momdiary.models.schemas import PoopEntry
+from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import (
+    get_default_timezone,
+    parse_iso_with_offset,
+)
+
+logger = get_logger(__name__)
 
 
 def _to_entry(row: Poop) -> dict:
@@ -45,6 +53,43 @@ async def log_poop(
 ) -> AgentRunResult:
     args = LogPoopArgs(occurred_at=occurred_at, consistency=consistency)
     repo = PoopsRepository(session)
+
+    # Same-minute dedup -> route to update_poop automatically.
+    try:
+        target_local_date = (
+            parse_iso_with_offset(args.occurred_at)
+            .astimezone(await get_default_timezone(session))
+            .date()
+        )
+        existing = await repo.list_by_date(target_local_date)
+        dup = find_same_minute(existing, args.occurred_at, lambda r: r.occurred_at)
+    except ValueError:
+        dup = None
+
+    if dup is not None:
+        logger.info(
+            "poops.log.deduped_to_update",
+            existing_id=dup.id,
+            occurred_at=args.occurred_at,
+        )
+        row, unchanged = await repo.update(
+            dup.id, occurred_at=args.occurred_at, consistency=args.consistency
+        )
+        assert row is not None
+        return AgentRunResult(
+            selected_tool="log_poop",
+            outcome="updated",
+            entry_type="poop",
+            entry_id=row.id,
+            payload=_to_entry(row),
+            agent_message=(
+                "No changes were needed."
+                if unchanged
+                else f"Updated existing diaper to {row.consistency}."
+            ),
+            unchanged=unchanged,
+        )
+
     row = await repo.create(**args.model_dump())
     return AgentRunResult(
         selected_tool="log_poop",

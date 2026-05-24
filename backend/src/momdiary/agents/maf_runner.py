@@ -16,6 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.diary_agent import build_agent
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.intent_router import (
+    IntentRouter,
+    NullIntentRouter,
+    RouterDecision,
+    allowed_tools_for,
+    default_router,
+)
 from momdiary.agents.session_store import ChatTurn
 from momdiary.agents.tools.registry import (
     READ_TOOL_REGISTRY,
@@ -109,13 +116,24 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
 
 
 def _build_tool_wrappers(
-    session: AsyncSession, captured: list[AgentRunResult]
+    session: AsyncSession,
+    captured: list[AgentRunResult],
+    *,
+    allowed_tools: frozenset[str] | None = None,
 ) -> list[Any]:
-    """Build per-request tool callables that bind `session` and capture results."""
+    """Build per-request tool callables that bind `session` and capture results.
+
+    When `allowed_tools` is provided, only tools whose name is in the set are
+    emitted as wrappers. `ask_for_clarification` is appended unconditionally
+    so the model always has an escape hatch. `None` means "no scoping" and
+    every registered tool is exposed (today's default behavior).
+    """
 
     wrappers: list[Any] = []
 
     for tool_name, tool_fn in TOOL_REGISTRY.items():
+        if allowed_tools is not None and tool_name not in allowed_tools:
+            continue
         original_sig = inspect.signature(tool_fn)
         # Strip the `session` positional from the public signature so MAF
         # generates a JSON schema with only the model-facing parameters.
@@ -158,6 +176,8 @@ def _build_tool_wrappers(
     # final response envelope; the model uses their data to answer or to
     # choose a follow-up write/delete tool).
     for read_name, read_fn in READ_TOOL_REGISTRY.items():
+        if allowed_tools is not None and read_name not in allowed_tools:
+            continue
         read_sig = inspect.signature(read_fn)
         read_public_params = [
             p
@@ -264,6 +284,23 @@ def _render_history(history: list[ChatTurn]) -> str:
 class MAFAgentRunner:
     """Runs the real Microsoft Agent Framework agent end-to-end."""
 
+    def __init__(self, router: IntentRouter | None = None) -> None:
+        # Routing is advisory: low-confidence decisions degrade to the
+        # current "all tools available" behavior, so injecting a no-op
+        # router (or letting this default to the regex+hint chain) is
+        # always safe.
+        if router is not None:
+            self._router = router
+        else:
+            from momdiary.config import get_settings
+
+            settings = get_settings()
+            self._router = (
+                default_router()
+                if settings.momdiary_intent_router_enabled
+                else NullIntentRouter()
+            )
+
     async def run(
         self,
         message: str,
@@ -278,8 +315,26 @@ class MAFAgentRunner:
             "MAFAgentRunner.run: `history` is required (pass [] for fresh sessions). "
             "FR-004 enforces that the dispatcher always supplies the recent_view."
         )
+
+        decision: RouterDecision = await self._router.classify(
+            message, entry_type_hint=entry_type, correlation_id=correlation_id
+        )
+        allowed = allowed_tools_for(decision)
+        logger.info(
+            "maf.intent.classified",
+            correlation_id=correlation_id,
+            resource=decision.resource,
+            action=decision.action,
+            confidence=round(decision.confidence, 2),
+            source=decision.source,
+            scoped=allowed is not None,
+            allowed_tool_count=None if allowed is None else len(allowed),
+            allowed_tools=None if allowed is None else sorted(allowed),
+            reason=decision.reason,
+        )
+
         captured: list[AgentRunResult] = []
-        tools = _build_tool_wrappers(session, captured)
+        tools = _build_tool_wrappers(session, captured, allowed_tools=allowed)
         bundle = build_agent(tools=tools)
         logger.info(
             "maf.agent.built",
@@ -291,6 +346,20 @@ class MAFAgentRunner:
         )
 
         context = await _format_context(session, entry_id, entry_type)
+        if allowed is not None:
+            # One-line routed hint helps the model commit to the scoped
+            # resource without re-deriving intent. Kept short so it does
+            # not dilute the main system prompt.
+            routed_line = (
+                f"Routed intent: resource={decision.resource}"
+                + (
+                    f", action={decision.action}"
+                    if decision.should_scope_action
+                    else ""
+                )
+                + ". Only the matching tools are available this turn."
+            )
+            context = f"{context}\n{routed_line}"
         history_block = _render_history(history)
         if history_block:
             full_message = (

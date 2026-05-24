@@ -8,9 +8,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
+from momdiary.agents.tools._dedup import find_same_minute
 from momdiary.db.repositories.feeds import FeedsRepository
 from momdiary.models.orm import Feed
 from momdiary.models.schemas import FeedEntry
+from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import (
+    get_default_timezone,
+    parse_iso_with_offset,
+)
+
+logger = get_logger(__name__)
 
 
 def _to_entry(row: Feed) -> dict:
@@ -69,6 +77,48 @@ async def log_feed(
         }
     )
     repo = FeedsRepository(session)
+
+    # Same-minute dedup -> route to update_feed automatically. Replaces the
+    # old prompt rule that asked the LLM to list_feeds first.
+    try:
+        target_local_date = (
+            parse_iso_with_offset(args.occurred_at)
+            .astimezone(await get_default_timezone(session))
+            .date()
+        )
+        existing = await repo.list_by_date(target_local_date)
+        dup = find_same_minute(existing, args.occurred_at, lambda r: r.occurred_at)
+    except ValueError:
+        dup = None  # let the repo's validation raise the canonical error
+
+    if dup is not None:
+        logger.info(
+            "feeds.log.deduped_to_update",
+            existing_id=dup.id,
+            occurred_at=args.occurred_at,
+        )
+        row, unchanged = await repo.update(
+            dup.id,
+            feed_type=args.feed_type,
+            quantity=args.quantity,
+            unit=args.unit,
+            occurred_at=args.occurred_at,
+        )
+        assert row is not None  # row came from list_by_date moments ago
+        return AgentRunResult(
+            selected_tool="log_feed",
+            outcome="updated",
+            entry_type="feed",
+            entry_id=row.id,
+            payload=_to_entry(row),
+            agent_message=(
+                "No changes were needed."
+                if unchanged
+                else f"Updated existing feed to {row.quantity} {row.unit} of {row.feed_type}."
+            ),
+            unchanged=unchanged,
+        )
+
     row = await repo.create(**args.model_dump())
     return AgentRunResult(
         selected_tool="log_feed",

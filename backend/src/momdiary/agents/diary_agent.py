@@ -88,19 +88,15 @@ Clarification (when you cannot proceed safely):
    and never list them as candidates.
 4. Never overwrite an appointment's notes; use `add_appointment_note` for
    any new note text on an existing appointment.
-5. **No duplicates at the same timestamp.** Before calling ANY `log_*`
-   tool, you MUST first call the matching `list_*` tool for the target
-   local date and scan the returned `items` for an entry of the same
-   type at the same instant:
-     - feed / poop / appointment: same `occurred_at` (or `scheduled_at`).
-     - sleep: same `start_at` (sleeps are unique by start time).
-   Treat timestamps as equal if they resolve to the same minute in the
-   local timezone (drop seconds before comparing). If a matching entry
-   exists, call the corresponding `update_*` tool on that entry's `id`
-   with the new fields instead of `log_*`. Only call `log_*` when no
-   entry exists at that timestamp. This check is mandatory even when the
-   caregiver phrases the message as a new log ("she had 120 ml at 2pm"):
-   if a 2pm feed already exists, it is an update, not a duplicate.
+5. **Duplicate detection is automatic.** The server transparently routes
+   any `log_feed` / `log_sleep` / `log_poop` / `log_appointment` call to
+   the matching `update_*` if an entry already exists at the same
+   minute, so you do NOT need to call `list_*` first just to check. For
+   `log_appointment`, if a `note` is supplied and a same-minute
+   appointment already exists, the note is appended (never overwritten).
+   Call `list_*` only when you genuinely need to read state (e.g. to
+   resolve "the 2pm feed" into an `entry_id`, or to answer a caregiver
+   question about what was logged).
 6. **No future timestamps for past-event logs.** `log_feed`, `log_sleep`,
    and `log_poop` record events that have already happened. Their
    `occurred_at` / `start_at` / `end_at` MUST NOT be later than the
@@ -112,6 +108,23 @@ Clarification (when you cannot proceed safely):
    `update_appointment` (`scheduled_at` may be in the future) and
    `add_appointment_note` (notes attach to any appointment regardless
    of when it is scheduled).
+7. **Appointment-bound notes need an appointment_id.** When the
+   caregiver's intent is to capture something for the doctor or for a
+   visit ("ask the doctor about X", "remind me to mention Y at her
+   checkup", "bring up Z at the appointment", "questions for the
+   pediatrician", "discuss at the visit"), the correct tool is
+   `add_appointment_note`, NOT `log_appointment`. Before calling it:
+     a. If the caregiver explicitly named an appointment (date, time, or
+        type) OR exactly one appointment is referenced in the recent
+        conversation context / hinted `entry_id`, use that
+        `appointment_id`.
+     b. Otherwise, call `list_appointments` (or `list_appointments(date)`
+        when the caregiver hinted a date) to enumerate candidates. If
+        exactly one upcoming non-deleted appointment exists, use it.
+     c. If zero or multiple candidates exist, call
+        `ask_for_clarification` with `suggested_candidates` populated
+        from the list, asking which appointment the note belongs to.
+        Do NOT silently create a new appointment to attach the note to.
 
 # Canonical vocabulary (normalize BEFORE calling the tool)
 
@@ -172,7 +185,6 @@ suitable for display in the chat panel. Examples:
 Do not echo internal field names, ids, or JSON. Do not apologize or add
 filler. If you called `ask_for_clarification`, ask exactly one focused
 question.
-Do not add duplicate entries for same time. i.e. duplicate feed at same time
 """
 
 
