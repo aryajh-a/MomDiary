@@ -10,6 +10,7 @@ import { HomePage } from "@/features/home/HomePage";
 import { PoopHistoryPage } from "@/features/home/PoopHistoryPage";
 import { SleepHistoryPage } from "@/features/home/SleepHistoryPage";
 import { AppointmentHistoryPage } from "@/features/home/AppointmentHistoryPage";
+import { ProfilePage } from "@/features/profile";
 
 const CHAT_VISIBLE_STORAGE_KEY = "momdiary.chatVisible";
 
@@ -37,6 +38,7 @@ function ProfileMenu(props: { displayName: string }): JSX.Element {
 function AppShell(props: {
   displayName: string;
   activeBabyId: number;
+  user: import("@/shared/types").UserPublic;
 }): JSX.Element {
   const [chatVisible, setChatVisible] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -53,7 +55,12 @@ function AppShell(props: {
   // local state (no router) — the app is currently a single-pane mobile flow
   // and adding react-router for one drill-down would be over-engineering.
   const [view, setView] = useState<
-    "home" | "feedHistory" | "poopHistory" | "sleepHistory" | "appointmentHistory"
+    | "home"
+    | "feedHistory"
+    | "poopHistory"
+    | "sleepHistory"
+    | "appointmentHistory"
+    | "profile"
   >("home");
 
   useEffect(() => {
@@ -98,6 +105,7 @@ function AppShell(props: {
           activeBabyId={props.activeBabyId}
           onOpenChat={showChat}
           onOpenVoice={showVoice}
+          onOpenProfile={() => setView("profile")}
           onOpenFeedHistory={() => setView("feedHistory")}
           onOpenPoopHistory={() => setView("poopHistory")}
           onOpenSleepHistory={() => setView("sleepHistory")}
@@ -109,8 +117,10 @@ function AppShell(props: {
         <PoopHistoryPage onBack={() => setView("home")} />
       ) : view === "sleepHistory" ? (
         <SleepHistoryPage onBack={() => setView("home")} />
-      ) : (
+      ) : view === "appointmentHistory" ? (
         <AppointmentHistoryPage onBack={() => setView("home")} />
+      ) : (
+        <ProfilePage user={props.user} onBack={() => setView("home")} />
       )}
 
       {chatVisible ? (
@@ -154,7 +164,11 @@ function AuthGate(): JSX.Element {
   return (
     <SelectedDateProvider>
       <ChatProvider>
-        <AppShell displayName={user.display_name} activeBabyId={user.active_baby_id} />
+        <AppShell
+          displayName={user.display_name}
+          activeBabyId={user.active_baby_id}
+          user={user}
+        />
       </ChatProvider>
     </SelectedDateProvider>
   );

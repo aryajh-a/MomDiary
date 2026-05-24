@@ -101,7 +101,7 @@ async def test_patch_baby_updates_display_name(client: AsyncClient, seed_caregiv
 
 
 @pytest.mark.asyncio
-async def test_delete_active_baby_clears_active(
+async def test_delete_active_baby_falls_back_to_remaining(
     anon_client: AsyncClient,
 ) -> None:
     # New caregiver with two babies.
@@ -124,13 +124,14 @@ async def test_delete_active_baby_clears_active(
     a_id = a.json()["id"]
     b_id = b.json()["id"]
 
-    # A is active (first-baby rule). Delete A → active_baby_id is cleared so
-    # the caregiver must explicitly pick a remaining baby (FR-019b / svc behavior).
+    # A is active (first-baby rule). Feature 007 FR-017 changed the contract:
+    # deleting the active baby atomically falls back to the most-recently-added
+    # remaining baby instead of clearing the slot to NULL.
     r = await anon_client.delete(f"/v1/babies/{a_id}")
     assert r.status_code == 200
 
     me = await anon_client.get("/v1/auth/me")
-    assert me.json()["user"]["active_baby_id"] is None
+    assert me.json()["user"]["active_baby_id"] == b_id
 
     # And listing no longer includes A.
     list_r = await anon_client.get("/v1/babies")

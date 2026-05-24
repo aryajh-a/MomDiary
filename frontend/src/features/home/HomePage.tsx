@@ -37,6 +37,7 @@ interface HomePageProps {
   activeBabyId: number;
   onOpenChat: () => void;
   onOpenVoice: () => void;
+  onOpenProfile: () => void;
   onOpenFeedHistory: () => void;
   onOpenPoopHistory: () => void;
   onOpenSleepHistory: () => void;
@@ -47,6 +48,7 @@ export function HomePage({
   activeBabyId,
   onOpenChat,
   onOpenVoice,
+  onOpenProfile,
   onOpenFeedHistory,
   onOpenPoopHistory,
   onOpenSleepHistory,
@@ -92,7 +94,11 @@ export function HomePage({
         appointments={appts.data?.items ?? []}
         loading={feeds.isLoading || sleeps.isLoading || poops.isLoading || appts.isLoading}
       />
-      <BottomTabBar onOpenChat={onOpenChat} onOpenVoice={onOpenVoice} />
+      <BottomTabBar
+        onOpenChat={onOpenChat}
+        onOpenVoice={onOpenVoice}
+        onOpenProfile={onOpenProfile}
+      />
     </main>
   );
 }
@@ -428,9 +434,11 @@ function RecentLogs(props: {
 function BottomTabBar({
   onOpenChat,
   onOpenVoice,
+  onOpenProfile,
 }: {
   onOpenChat: () => void;
   onOpenVoice: () => void;
+  onOpenProfile: () => void;
 }): JSX.Element {
   return (
     <nav
@@ -441,7 +449,7 @@ function BottomTabBar({
       <TabButton label="Insights" icon={<ChartIcon className="h-5 w-5" />} />
       <TabButton label="Chat" onClick={onOpenChat} icon={<ChatBubbleIcon className="h-6 w-6" />} />
       <TabButton label="Voice" onClick={onOpenVoice} icon={<ChatIcon className="h-7 w-7" />} />
-      <TabButton label="Profile" icon={<UserIcon className="h-5 w-5" />} />
+      <TabButton label="Profile" onClick={onOpenProfile} icon={<UserIcon className="h-5 w-5" />} />
     </nav>
   );
 }

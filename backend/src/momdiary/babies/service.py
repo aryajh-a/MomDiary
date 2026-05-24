@@ -77,11 +77,31 @@ class BabyService:
         return baby
 
     async def soft_delete(self, baby: Baby, *, owner: User) -> None:
+        """Soft-delete `baby`. If it was the active baby, atomically reassign
+        the owner's `active_baby_id` to their most-recently-added remaining
+        baby (created_at DESC), or `NULL` if no others remain.
+
+        Reassignment is part of the same flush as the soft-delete so the
+        invariant "active_baby_id is either NULL or points at a live owned
+        baby" never breaks mid-transaction. See FR-017 / data-model §
+        "Atomic active-baby fallback".
+        """
         now = _utcnow_iso()
         baby.deleted_at = now
         baby.updated_at = now
         if owner.active_baby_id == baby.id:
-            owner.active_baby_id = None
+            stmt = (
+                select(Baby)
+                .where(
+                    Baby.owner_user_id == owner.id,
+                    Baby.deleted_at.is_(None),
+                    Baby.id != baby.id,
+                )
+                .order_by(Baby.created_at.desc(), Baby.id.desc())
+                .limit(1)
+            )
+            fallback = (await self._db.execute(stmt)).scalar_one_or_none()
+            owner.active_baby_id = fallback.id if fallback is not None else None
             owner.updated_at = now
         await self._db.flush()
 
