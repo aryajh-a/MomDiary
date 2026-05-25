@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import sys
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,7 +13,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.agents.dispatcher import AgentRunResult
@@ -61,6 +64,13 @@ async def configured_app(
 
     cfg_path = Path(__file__).resolve().parents[1] / "alembic.ini"
     alembic_cfg = Config(str(cfg_path))
+    # `script_location` in alembic.ini is the relative path "alembic"; alembic
+    # resolves it against the process cwd, which isn't necessarily the backend
+    # directory when pytest is invoked from the repo root. Pin it to an
+    # absolute path so the tests are cwd-independent.
+    alembic_cfg.set_main_option(
+        "script_location", str(cfg_path.parent / "alembic")
+    )
     alembic_cfg.set_main_option(
         "sqlalchemy.url", f"sqlite+aiosqlite:///{db_path}"
     )
@@ -270,6 +280,54 @@ def scripted_agent() -> ScriptedAgent:
     return ScriptedAgent()
 
 
+# ---------------------------------------------------------------------------
+# Opt-in HTTP tracing
+# ---------------------------------------------------------------------------
+# Set `MOMDIARY_TEST_TRACE=1` and run pytest with `-s` to see the request and
+# response body of every API call made by the test client. Useful for
+# debugging agent routing and dedup behavior. Output goes to stderr so it's
+# visible even when stdout capturing is enabled.
+def _trace_enabled() -> bool:
+    return os.environ.get("MOMDIARY_TEST_TRACE", "").lower() in {"1", "true", "yes"}
+
+
+def _pretty(raw: bytes) -> str:
+    if not raw:
+        return ""
+    try:
+        return json.dumps(json.loads(raw.decode("utf-8")), indent=2, default=str)
+    except Exception:
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return repr(raw)
+
+
+async def _log_request(request: Request) -> None:
+    body = _pretty(request.content or b"")
+    print(
+        f"\n>>> {request.method} {request.url}"
+        + (f"\n{body}" if body else ""),
+        file=sys.stderr,
+    )
+
+
+async def _log_response(response: Response) -> None:
+    await response.aread()
+    body = _pretty(response.content)
+    print(
+        f"<<< {response.status_code} {response.request.method} {response.request.url}"
+        + (f"\n{body}" if body else ""),
+        file=sys.stderr,
+    )
+
+
+def _trace_hooks() -> dict[str, list[Any]]:
+    if not _trace_enabled():
+        return {}
+    return {"request": [_log_request], "response": [_log_response]}
+
+
 @pytest_asyncio.fixture
 async def client(
     configured_app: Any,
@@ -278,7 +336,9 @@ async def client(
 ) -> AsyncIterator[AsyncClient]:
     configured_app.dependency_overrides[get_agent_runner] = lambda: scripted_agent
     async with AsyncClient(
-        transport=ASGITransport(app=configured_app), base_url="http://test"
+        transport=ASGITransport(app=configured_app),
+        base_url="http://test",
+        event_hooks=_trace_hooks(),
     ) as c:
         c.cookies.set("momdiary_session", seed_caregiver.session_token)
         yield c
@@ -296,7 +356,9 @@ async def anon_client(
     """
     configured_app.dependency_overrides[get_agent_runner] = lambda: scripted_agent
     async with AsyncClient(
-        transport=ASGITransport(app=configured_app), base_url="http://test"
+        transport=ASGITransport(app=configured_app),
+        base_url="http://test",
+        event_hooks=_trace_hooks(),
     ) as c:
         yield c
     configured_app.dependency_overrides.clear()

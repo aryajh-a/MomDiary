@@ -32,10 +32,20 @@ async def test_repeated_put_byte_identical(
     r2 = await client.put("/v1/entries", json=body)
     assert r1.status_code == r2.status_code == 200
 
-    # Strip volatile fields before comparing
+    # Strip volatile fields before comparing. The `agent_message` differs
+    # between the two responses because the second PUT hits the dedup path
+    # ("No changes were needed.") while the first applies the diff
+    # ("Feed updated."). The idempotency contract is about *state*, not the
+    # human-readable message, so we compare the resulting entry payload.
     def canonical(payload: dict) -> dict:
         e = dict(payload["entry"])
         e.pop("updated_at", None)
-        return {**payload, "entry": e, "correlation_id": None, "session_id": None}
+        return {
+            **payload,
+            "entry": e,
+            "correlation_id": None,
+            "session_id": None,
+            "agent_message": None,
+        }
 
     assert canonical(r1.json()) == canonical(r2.json())
