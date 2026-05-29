@@ -1,6 +1,6 @@
 ﻿# MomDiary Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-23
+Auto-generated from all feature plans. Last updated: 2026-05-27
 
 ## Active Technologies
 - Python 3.12 + FastAPI, Microsoft Agent Framework (`agent-framework`, `agent-framework-azure-ai`, prerelease per constitution), `azure-identity`, SQLAlchemy 2.x (async) + `aiosqlite`, Alembic, Pydantic v2, `structlog` (or `python-json-logger`) (001-setup-environment)
@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-23
 - SQLite (`backend/momdiary.db`); new tables `users`, `user_sessions`, `babies`; `baby_id NOT NULL` FK added to every existing diary table; pre-existing diary rows hard-deleted on migration. (006-user-and-baby-profiles)
 - Python 3.12 (backend, unchanged surface area); TypeScript 5.4 (frontend) (007-profile-management)
 - SQLite (`backend/momdiary.db`); no new tables, no new columns, no Alembic migration. (007-profile-management)
+- Python 3.12 (backend, unchanged), TypeScript 5.4 (frontend, unchanged). (008-clerk-auth)
+- SQLite (`backend/momdiary.db`) via `sqlite+aiosqlite`. One new Alembic revision (`2026XXXX_008_clerk_users.py`). (008-clerk-auth)
 
 ## Project Structure
 
@@ -31,9 +33,9 @@ cd src; pytest; ruff check .
 Python 3.12: Follow project lint/format gates (ruff, black-compatible). TypeScript 5.4: project ESLint + Prettier.
 
 ## Recent Changes
+- 008-clerk-auth: Added Python 3.12 (backend, unchanged), TypeScript 5.4 (frontend, unchanged).
 - 007-profile-management: Added Python 3.12 (backend, unchanged surface area); TypeScript 5.4 (frontend)
 - 006-user-and-baby-profiles: Added caregiver accounts (email + Argon2id-hashed password), rolling 30-day HttpOnly session cookies, single-owner baby profiles, and `baby_id NOT NULL` scoping on every existing diary endpoint. Chat session store repartitioned by `(user_id, baby_id, session_id)`. No new AI agent introduced.
-- 003-chat-session-store: Added in-memory `SessionStore` (process-singleton, bounded by TTL / max_turns / max_sessions / message_max_bytes / prompt_token_budget). History threaded through `MAFAgentRunner.run(..., history=...)`. `X-Session-ID` request/response header on `/v1/entries` (POST + PUT). Required `session_id` on `AgentWriteResponse` / `AgentClarificationResponse` / `ErrorResponse`.
 
 
 <!-- MANUAL ADDITIONS START -->

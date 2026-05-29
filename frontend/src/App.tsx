@@ -1,6 +1,16 @@
+import {
+  RedirectToSignIn,
+  SignedIn,
+  SignedOut,
+  useAuth,
+} from "@clerk/clerk-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { AuthShell } from "@/features/auth/AuthShell";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { SignInPage } from "@/features/auth/SignInPage";
+import { SignUpPage } from "@/features/auth/SignUpPage";
+import { VerifyEmailBanner } from "@/features/auth/VerifyEmailBanner";
 import { useLogoutMutation, useSession } from "@/features/auth/useSession";
+import { onUnauthorized } from "@/shared/apiClient";
 import { BabySwitcher } from "@/features/babies/BabySwitcher";
 import { FirstBabyPrompt } from "@/features/babies/FirstBabyPrompt";
 import { ChatProvider } from "@/features/chat/ChatContext";
@@ -38,22 +48,15 @@ function ProfileMenu(props: { displayName: string }): JSX.Element {
 function AppShell(props: {
   displayName: string;
   activeBabyId: number;
-  user: import("@/shared/types").UserPublic;
+  user: import("@/shared/types").CurrentUser;
 }): JSX.Element {
   const [chatVisible, setChatVisible] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     const stored = window.localStorage.getItem(CHAT_VISIBLE_STORAGE_KEY);
     return stored === "true";
   });
-  // When the caregiver opens the chat via the bottom "Voice" tab the panel
-  // becomes a voice-only experience (no textarea, every utterance is sent to
-  // the research API). We just flag it for one open and ChatPanel consumes
-  // it on mount.
   const [chatVoiceOnly, setChatVoiceOnly] = useState(false);
 
-  // Drives the in-app "page" the caregiver sees. We deliberately keep this in
-  // local state (no router) — the app is currently a single-pane mobile flow
-  // and adding react-router for one drill-down would be over-engineering.
   const [view, setView] = useState<
     | "home"
     | "feedHistory"
@@ -68,12 +71,6 @@ function AppShell(props: {
     window.localStorage.setItem(CHAT_VISIBLE_STORAGE_KEY, String(chatVisible));
   }, [chatVisible]);
 
-  // Pre-load the ChatPanel chunk so that opening the chat (especially via
-  // the bottom "Voice" tab, which auto-starts the mic) happens synchronously
-  // and stays within the browser's user-gesture window. Without this the
-  // dynamic import resolves after the click tick, which Chrome treats as
-  // outside the gesture for SpeechRecognition.start() — the mic then never
-  // actually listens.
   useEffect(() => {
     void import("@/features/chat/ChatPanel");
   }, []);
@@ -93,8 +90,7 @@ function AppShell(props: {
 
   return (
     <div className="min-h-screen bg-amber-50">
-      {/* Small utility strip above the home view so the caregiver can still
-          switch babies and sign out without leaving the dashboard. */}
+      <VerifyEmailBanner />
       <div className="mx-auto flex w-full max-w-md items-center justify-between gap-2 px-4 pt-3">
         <BabySwitcher activeBabyId={props.activeBabyId} />
         <ProfileMenu displayName={props.displayName} />
@@ -145,10 +141,15 @@ function AppShell(props: {
   );
 }
 
-function AuthGate(): JSX.Element {
+/**
+ * Inner shell — only mounted once Clerk reports the user is signed in.
+ * Fetches the backend's `CurrentUserOut` projection (which lazy-provisions
+ * the row on first sight) before revealing the diary surface.
+ */
+function SignedInShell(): JSX.Element {
   const session = useSession();
 
-  if (session.isLoading) {
+  if (session.isLoading || (session.isPending && !session.data)) {
     return (
       <main className="flex min-h-screen items-center justify-center text-slate-500">
         Loading…
@@ -157,7 +158,13 @@ function AuthGate(): JSX.Element {
   }
 
   const user = session.data?.user;
-  if (!user) return <AuthShell />;
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center text-slate-500">
+        Signing you in…
+      </main>
+    );
+  }
 
   if (user.active_baby_id == null) return <FirstBabyPrompt />;
 
@@ -174,6 +181,42 @@ function AuthGate(): JSX.Element {
   );
 }
 
+/**
+ * On any backend 401, force-sign-out so the `<SignedIn>` gate flips and the
+ * caregiver is redirected to the Clerk sign-in page. Without this an expired
+ * JWT would leave the UI mounted in a permanently-erroring state.
+ */
+function UnauthorizedRedirector(): null {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => {
+    return onUnauthorized(() => {
+      void signOut().finally(() => navigate("/sign-in", { replace: true }));
+    });
+  }, [signOut, navigate]);
+  return null;
+}
+
 export default function App(): JSX.Element {
-  return <AuthGate />;
+  return (
+    <Routes>
+      <Route path="/sign-in/*" element={<SignInPage />} />
+      <Route path="/sign-up/*" element={<SignUpPage />} />
+      <Route
+        path="/*"
+        element={
+          <>
+            <UnauthorizedRedirector />
+            <SignedIn>
+              <SignedInShell />
+            </SignedIn>
+            <SignedOut>
+              <RedirectToSignIn />
+            </SignedOut>
+          </>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }

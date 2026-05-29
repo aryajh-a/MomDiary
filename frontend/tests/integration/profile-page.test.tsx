@@ -21,6 +21,7 @@ const USER: UserPublic = {
   id: 1,
   email: "mom@example.com",
   display_name: "Mom Example",
+  email_verified: true,
   active_baby_id: 10,
 };
 

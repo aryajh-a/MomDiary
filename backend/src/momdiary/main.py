@@ -42,17 +42,19 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Active-Baby-Id",
+            "X-Session-ID",
+            "X-Correlation-ID",
+        ],
         expose_headers=["X-Session-ID", "X-Correlation-ID"],
-        allow_credentials=True,
+        allow_credentials=False,
     )
-    from momdiary.auth.middleware import (
-        AuthLogContextMiddleware,
-        OriginCsrfMiddleware,
-    )
+    from momdiary.auth.middleware import AuthLogContextMiddleware
 
     app.add_middleware(AuthLogContextMiddleware)
-    app.add_middleware(OriginCsrfMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
 
     @app.exception_handler(FastAPIHTTPException)
@@ -71,7 +73,6 @@ def create_app() -> FastAPI:
     # module a stable composition root.
     from momdiary.api import (
         appointments,
-        auth,
         babies,
         entries,
         feeds,
@@ -79,9 +80,9 @@ def create_app() -> FastAPI:
         research,
         sleeps,
         users,
+        webhooks,
     )
 
-    app.include_router(auth.router, prefix="/v1")
     app.include_router(users.router, prefix="/v1")
     app.include_router(babies.router, prefix="/v1")
     app.include_router(entries.router, prefix="/v1")
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(poops.router, prefix="/v1")
     app.include_router(appointments.router, prefix="/v1")
     app.include_router(research.router, prefix="/v1")
+    app.include_router(webhooks.router, prefix="/v1")
     logger.info("app.routers_registered", count=9)
     return app
 

@@ -1,0 +1,181 @@
+openapi: 3.1.0
+info:
+  title: MomDiary Clerk Authentication Contract
+  version: 1.0.0
+  description: |
+    New and modified API surfaces introduced by feature 008-clerk-auth.
+
+    All previously-existing `/v1/auth/register`, `/v1/auth/login`,
+    `/v1/auth/logout`, and `/v1/auth/me` endpoints from feature 006 are
+    REMOVED. Their functionality is replaced by Clerk's prebuilt
+    sign-in/sign-up components on the frontend and by JWT bearer auth on
+    the backend.
+
+    Every protected endpoint expects an `Authorization: Bearer <clerk_jwt>`
+    header. Verification is performed networklessly by the backend
+    against Clerk's JWKS.
+
+servers:
+  - url: http://localhost:8000
+
+paths:
+
+  /v1/users/me:
+    get:
+      summary: Get the currently signed-in caregiver.
+      description: |
+        Resolves the Clerk JWT, lazily provisions a `users` row on first
+        sign-in (FR-005), mirrors the latest email and verification state
+        from the JWT, and returns the caregiver projection.
+
+        Returns `401` if no JWT is presented, the JWT signature is
+        invalid, or the JWT is expired (FR-010).
+
+        Does NOT require a verified email (a brand-new email/password
+        caregiver can read `/me` to learn they are gated by FR-017).
+      security:
+        - clerkBearer: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/NotSignedIn'
+
+  /v1/webhooks/clerk:
+    post:
+      summary: Receive Clerk webhook events (Svix-signed).
+      description: |
+        Public endpoint that receives Clerk events delivered via Svix.
+        The request body is verified against `CLERK_WEBHOOK_SECRET`
+        using the `svix-id`, `svix-timestamp`, and `svix-signature`
+        headers BEFORE any business logic runs.
+
+        Supported event types in this release:
+          - `user.deleted` → cascade hard-delete (FR-015, FR-016).
+          - `user.updated` → mirror email and verification state into
+            the local `users` row.
+
+        Other event types are accepted and acknowledged but ignored.
+
+        Replays MUST be idempotent (FR-015).
+      parameters:
+        - in: header
+          name: svix-id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClerkWebhookEnvelope'
+      responses:
+        '200':
+          description: Event accepted (idempotent).
+        '400':
+          description: Malformed body.
+        '401':
+          description: Signature verification failed.
+
+components:
+
+  securitySchemes:
+    clerkBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Clerk-issued short-lived JWT minted via the
+        `momdiary-default` JWT template. Claims used by the backend:
+        `sub`, `email`, `email_verified`, `iss`, `aud`, `exp`, `iat`, `sid`.
+
+  responses:
+    NotSignedIn:
+      description: |
+        Returned when the request carries no valid Clerk JWT.
+        The body uses a uniform shape so the client can redirect to
+        `/sign-in` without case analysis (FR-010).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NotSignedInError'
+
+  schemas:
+
+    CurrentUser:
+      type: object
+      required: [id, clerk_user_id, email, email_verified, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Internal stable caregiver ID.
+        clerk_user_id:
+          type: string
+          description: Stable Clerk identifier (the JWT `sub` claim).
+        email:
+          type: string
+          format: email
+        email_verified:
+          type: boolean
+          description: |
+            Mirrors the `email_verified` claim from the current JWT.
+            When `false`, every write endpoint will reject the caller
+            with 403 (see FR-017).
+        created_at:
+          type: string
+          format: date-time
+
+    ClerkWebhookEnvelope:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          examples:
+            - user.deleted
+            - user.updated
+        data:
+          type: object
+          description: |
+            Event-type-specific payload. For `user.deleted`, the only
+            field the backend relies on is `data.id` (the Clerk user ID).
+
+    NotSignedInError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [not_signed_in]
+        message:
+          type: string
+          examples:
+            - Please sign in to continue.
+
+    WriteForbiddenUnverifiedError:
+      type: object
+      description: |
+        Body of the 403 returned by every write endpoint when the
+        caller's JWT `email_verified` claim is `false` (FR-017, FR-019).
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [email_not_verified]
+        message:
+          type: string
+          examples:
+            - Please verify your email to continue.

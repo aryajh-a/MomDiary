@@ -1,4 +1,4 @@
-"""Auth-related request/response schemas (feature 006)."""
+"""Auth-related response schemas — feature 008 (Clerk JWT identity)."""
 
 from __future__ import annotations
 
@@ -11,33 +11,32 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-# Argon2id practical floor: 12 chars; max 128 to bound hashing cost.
-PasswordStr = Annotated[str, Field(min_length=12, max_length=128)]
 DisplayNameStr = Annotated[str, Field(min_length=1, max_length=80)]
-
-
-class RegisterRequest(_StrictModel):
-    email: EmailStr
-    password: PasswordStr
-    display_name: DisplayNameStr
-
-
-class LoginRequest(_StrictModel):
-    email: EmailStr
-    password: PasswordStr
 
 
 class UserPublic(_StrictModel):
     id: int
     email: EmailStr
     display_name: str
+    email_verified: bool = False
     active_baby_id: int | None = None
 
 
 class AuthSessionInfo(_StrictModel):
-    """Returned by POST /v1/auth/login, /register, and GET /v1/auth/me."""
+    """Returned by GET /v1/users/me."""
 
     user: UserPublic
+
+
+class CurrentUserOut(_StrictModel):
+    """OpenAPI `CurrentUser` projection (feature 008 contract)."""
+
+    id: int
+    clerk_user_id: str
+    email: EmailStr
+    email_verified: bool
+    display_name: str
+    active_baby_id: int | None = None
 
 
 class ErrorResponse(_StrictModel):

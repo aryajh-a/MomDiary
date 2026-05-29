@@ -266,7 +266,6 @@ export type ErrorBody = z.infer<typeof errorBodySchema>;
 export const okResponseSchema = z.object({ ok: z.literal(true) });
 
 const emailSchema = z.string().email().max(254);
-const passwordSchema = z.string().min(12).max(128);
 const displayNameSchema = z.string().min(1).max(80);
 const colorTagSchema = z.string().max(16);
 const dateOfBirth = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -275,24 +274,24 @@ export const userPublicSchema = z.object({
   id: z.number().int().positive(),
   email: emailSchema,
   display_name: displayNameSchema,
+  email_verified: z.boolean(),
   active_baby_id: z.number().int().positive().nullable(),
 });
 export type UserPublic = z.infer<typeof userPublicSchema>;
 
-export const authMeSchema = z.object({ user: userPublicSchema });
-
-export const registerRequestSchema = z.object({
+/** `GET /v1/users/me` — flat `CurrentUserOut` projection (feature 008). */
+export const currentUserSchema = z.object({
+  id: z.number().int().positive(),
+  clerk_user_id: z.string().min(1),
   email: emailSchema,
-  password: passwordSchema,
+  email_verified: z.boolean(),
   display_name: displayNameSchema,
+  active_baby_id: z.number().int().positive().nullable(),
 });
-export type RegisterRequest = z.infer<typeof registerRequestSchema>;
+export type CurrentUser = z.infer<typeof currentUserSchema>;
 
-export const loginRequestSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
-});
-export type LoginRequest = z.infer<typeof loginRequestSchema>;
+/** `PUT/PATCH /v1/users/me` and `POST /v1/users/me/active-baby` — wrapped. */
+export const authMeSchema = z.object({ user: userPublicSchema });
 
 export const userUpdateSchema = z.object({
   display_name: displayNameSchema,
