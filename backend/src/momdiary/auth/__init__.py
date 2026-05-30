@@ -1,29 +1,33 @@
-"""Authentication primitives — feature 006.
+"""Authentication primitives — feature 008 (Clerk-issued JWT)."""
 
-Public surface:
-
-* `hasher.PasswordHasherService` — Argon2id hashing (research §R1).
-* `sessions.SessionService` — opaque-token rolling sessions (research §R2).
-* `dependencies.current_user`, `current_session` — FastAPI dependencies.
-* `dependencies.active_baby_id` — resolves the per-request active baby
-  using `X-Active-Baby-Id` header override → `users.active_baby_id` →
-  `409 no_active_baby` (research §R7).
-* `middleware.AuthLogContextMiddleware` — enriches structlog with user_id +
-  baby_id; performs the Origin/Referer CSRF check (research §R3).
-"""
-
-from momdiary.auth.dependencies import (
-    AuthContext,
-    current_user,
-    require_active_baby,
+from momdiary.auth.clerk import (
+    ClerkAuthError,
+    ClerkClaims,
+    get_jwks_cache,
+    verify_clerk_jwt,
 )
-from momdiary.auth.hasher import PasswordHasherService
-from momdiary.auth.sessions import SessionService
+from momdiary.auth.dependencies import (
+    ActiveBabyDep,
+    AuthContext,
+    CurrentUser,
+    CurrentUserDep,
+    VerifiedUserDep,
+    get_current_user,
+    require_active_baby,
+    require_verified_email,
+)
 
 __all__ = [
+    "ActiveBabyDep",
     "AuthContext",
-    "PasswordHasherService",
-    "SessionService",
-    "current_user",
+    "ClerkAuthError",
+    "ClerkClaims",
+    "CurrentUser",
+    "CurrentUserDep",
+    "VerifiedUserDep",
+    "get_current_user",
+    "get_jwks_cache",
     "require_active_baby",
+    "require_verified_email",
+    "verify_clerk_jwt",
 ]

@@ -125,6 +125,8 @@ class SessionStore(Protocol):
 
     async def evict_expired(self, now: datetime | None = None) -> int: ...
 
+    async def purge_user(self, user_id: int) -> int: ...
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
@@ -278,6 +280,26 @@ class InMemorySessionStore:
 
     def _resident_count(self) -> int:
         return len(self._sessions)
+
+    # -- account deletion cascade (feature 008 FR-015) ------------------
+
+    async def purge_user(self, user_id: int) -> int:
+        """Evict every resident session whose key starts with `user_id`.
+
+        Called by the Clerk webhook handler on `user.deleted` so a deleted
+        caregiver leaves no chat-history residue in the process.
+        """
+        async with self._store_lock:
+            victims = [k for k in self._sessions if k[0] == user_id]
+            for key in victims:
+                del self._sessions[key]
+            if victims:
+                logger.info(
+                    "session.purged_user",
+                    user_id=user_id,
+                    purged=len(victims),
+                )
+            return len(victims)
 
     def _peek(
         self, session_id: str, *, user_id: int = 0, baby_id: int = 0

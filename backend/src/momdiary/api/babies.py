@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from momdiary.auth.dependencies import CurrentUserDep
+from momdiary.auth.dependencies import CurrentUserDep, require_verified_email
 from momdiary.babies.service import BabyService
 from momdiary.db.engine import get_session
 from momdiary.observability.middleware import current_correlation_id
@@ -54,7 +54,12 @@ async def list_babies(
     return BabyListResponse(items=[_public(b) for b in rows])
 
 
-@router.post("", response_model=BabyPublic, status_code=201)
+@router.post(
+    "",
+    response_model=BabyPublic,
+    status_code=201,
+    dependencies=[Depends(require_verified_email)],
+)
 async def create_baby(
     payload: BabyCreate,
     auth: CurrentUserDep,
@@ -69,7 +74,11 @@ async def create_baby(
     return _public(baby)
 
 
-@router.patch("/{baby_id}", response_model=BabyPublic)
+@router.patch(
+    "/{baby_id}",
+    response_model=BabyPublic,
+    dependencies=[Depends(require_verified_email)],
+)
 async def update_baby(
     baby_id: int,
     payload: BabyUpdate,
@@ -85,7 +94,7 @@ async def update_baby(
     return _public(baby)
 
 
-@router.delete("/{baby_id}")
+@router.delete("/{baby_id}", dependencies=[Depends(require_verified_email)])
 async def delete_baby(
     baby_id: int,
     auth: CurrentUserDep,

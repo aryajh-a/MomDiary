@@ -20,11 +20,22 @@ For the full walkthrough see [`specs/002-tracker-ux-chat/quickstart.md`](../spec
 
 ## Environment
 
-Copy `.env.example` → `.env.local` and set `VITE_API_BASE_URL` to the running backend host (default `http://localhost:8000`).
+Copy `.env.example` → `.env.local` and set:
 
-## Security caveat
+- `VITE_API_BASE_URL` — backend host (default `http://localhost:8000`).
+- `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (`pk_test_...` / `pk_live_...`).
+  Obtain from the Clerk Dashboard → API Keys. The app will fail to mount
+  `<ClerkProvider>` without it (feature 008).
 
-v1 ships with **no browser-to-backend authentication** (see [research.md §R6](../specs/002-tracker-ux-chat/research.md)). The dev backend uses a CORS allow-list (`MOMDIARY_ALLOWED_ORIGINS`) defaulted to `http://localhost:5173`. Do not expose the backend to the public internet without first wiring up Microsoft Entra ID (or another auth provider) on the API surface.
+## Auth (feature 008)
+
+MomDiary uses **Clerk** as the sole identity provider. The frontend embeds
+Clerk's prebuilt `<SignIn />` and `<SignUp />` components at in-app routes
+`/sign-in` and `/sign-up` and supplies a Clerk-issued JWT on every API
+request via `Authorization: Bearer <token>`. See
+[`specs/008-clerk-auth/quickstart.md`](../specs/008-clerk-auth/quickstart.md)
+for Clerk dashboard configuration (email+password, Google provider, the
+`momdiary-default` JWT template, and the webhook endpoint).
 
 ## Optional: Playwright
 

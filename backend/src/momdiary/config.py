@@ -47,14 +47,18 @@ class Settings(BaseSettings):
     # suspected of being wrong.
     momdiary_intent_router_enabled: bool = Field(default=True)
 
-    # Auth / cookie settings (feature 006).
-    momdiary_session_cookie_name: str = Field(default="momdiary_session")
-    momdiary_session_cookie_ttl_days: int = Field(default=30)
-    # Set False in dev when serving over plain http.
-    momdiary_session_cookie_secure: bool = Field(default=False)
-    momdiary_session_cookie_samesite: Literal["lax", "strict", "none"] = Field(
-        default="lax"
-    )
+    # Feature 008 — Clerk-powered caregiver authentication.
+    # `clerk_secret_key`: Clerk backend secret (sk_test_... / sk_live_...).
+    # `clerk_jwt_issuer`: e.g. "https://clerk.<your-app>.com" — must match `iss`.
+    # `clerk_jwt_audience`: optional `aud` claim to enforce; empty disables aud check.
+    # `clerk_webhook_secret`: Svix secret (whsec_...) for /v1/webhooks/clerk.
+    # Settings are read from backend/.env (see backend/.env.example).
+    clerk_secret_key: str = Field(default="")
+    clerk_jwt_issuer: str = Field(default="")
+    clerk_jwt_audience: str = Field(default="")
+    clerk_webhook_secret: str = Field(default="")
+    # JWKS cache TTL (seconds); force-refresh also triggered on unknown `kid`.
+    clerk_jwks_cache_ttl_seconds: int = Field(default=3_600)
 
     @property
     def allowed_origins_list(self) -> list[str]:

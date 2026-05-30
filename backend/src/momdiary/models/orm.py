@@ -30,14 +30,25 @@ class Base(DeclarativeBase):
 
 
 class User(Base):
-    """A caregiver account (feature 006)."""
+    """A caregiver account.
+
+    Feature 008 rewrite: identity is now anchored to a Clerk user
+    (`clerk_user_id`, unique, not-null). The `password_hash` and
+    `password_updated_at` columns from feature 006 are removed; email +
+    email-verification state are mirrored from the Clerk JWT on every
+    sign-in (lazy provisioning lives in `auth.dependencies`).
+    """
 
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Clerk user id (`user_2abc...`), source of truth for identity.
+    clerk_user_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     email: Mapped[str] = mapped_column(String, nullable=False)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL when Clerk reports the primary email is not yet verified.
+    # Server-side write gate (require_verified_email) keys off this column.
+    email_verified_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     active_baby_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("babies.id", ondelete="SET NULL", use_alter=True),
@@ -55,29 +66,6 @@ class User(Base):
         # Unique case-insensitive index on email is created in the Alembic
         # revision (SQLite-specific COLLATE NOCASE).
         Index("ix_users_deleted", "deleted_at"),
-    )
-
-
-class UserSession(Base):
-    """Opaque, server-issued auth session bound to a HttpOnly cookie."""
-
-    __tablename__ = "user_sessions"
-
-    # The PK *is* the token value stored in the cookie. Generated with
-    # `secrets.token_urlsafe(32)` (≥256 bits of entropy).
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    created_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
-    expires_at: Mapped[str] = mapped_column(Text, nullable=False)
-    last_seen_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
-    revoked_at: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        Index("ix_user_sessions_user_id", "user_id"),
-        Index("ix_user_sessions_expires_at", "expires_at"),
     )
 
 

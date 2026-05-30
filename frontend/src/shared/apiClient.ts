@@ -9,16 +9,15 @@ import {
   type BabyCreate,
   type BabyListResponse,
   type BabyUpdate,
+  type CurrentUser,
   type FeedCreate,
   type FeedEntry,
   type FeedListResponse,
   type FeedUpdate,
-  type LoginRequest,
   type PoopEntry,
   type PoopListResponse,
   type PoopCreate,
   type PoopUpdate,
-  type RegisterRequest,
   type ResearchRequest,
   type ResearchResponse,
   type SetActiveBabyRequest,
@@ -34,6 +33,7 @@ import {
   authMeSchema,
   babyListResponseSchema,
   babySchema,
+  currentUserSchema,
   errorBodySchema,
   feedEntrySchema,
   feedListResponseSchema,
@@ -106,12 +106,23 @@ export function setActiveBabyId(id: number | null): void {
   }
 }
 
-// Subscribed by `useSession` so the app can redirect to /login on auth loss.
+// Subscribed by `useSession` so the app can react to auth loss (e.g.
+// signOut() + redirect). Triggered on any 401 from the backend.
 type UnauthorizedListener = () => void;
 const unauthorizedListeners = new Set<UnauthorizedListener>();
 export function onUnauthorized(fn: UnauthorizedListener): () => void {
   unauthorizedListeners.add(fn);
   return () => unauthorizedListeners.delete(fn);
+}
+
+// ----- Clerk bearer-token injection (feature 008) -----
+// `main.tsx` mounts <ClerkTokenBridge/> which registers a token provider here
+// on first render and re-registers on sign-out. The provider must return
+// a JWT minted from the `momdiary-default` template (or null when signed-out).
+type TokenProvider = () => Promise<string | null>;
+let tokenProvider: TokenProvider | null = null;
+export function setTokenProvider(fn: TokenProvider | null): void {
+  tokenProvider = fn;
 }
 
 async function request<T>(
@@ -129,13 +140,21 @@ async function request<T>(
   if (activeBabyId !== null && !headers.has("X-Active-Baby-Id")) {
     headers.set("X-Active-Baby-Id", String(activeBabyId));
   }
+  if (tokenProvider && !headers.has("Authorization")) {
+    try {
+      const token = await tokenProvider();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+    } catch {
+      // Token mint failed (e.g. signed-out) — fall through; the request
+      // will 401 and the unauthorized listeners will redirect.
+    }
+  }
 
   let response: Response;
   try {
     response = await fetch(`${getBaseUrl()}${path}`, {
       ...init,
       headers,
-      credentials: "include",
     });
   } catch (cause) {
     throw new ApiError({
@@ -208,27 +227,10 @@ function safeParseJson(text: string): unknown {
 }
 
 export const apiClient = {
-  // ---- auth (feature 006) ----
-  register: (body: RegisterRequest): Promise<{ user: UserPublic }> =>
-    request(
-      `/v1/auth/register`,
-      { method: "POST", body: JSON.stringify(body) },
-      authMeSchema,
-    ),
-  login: (body: LoginRequest): Promise<{ user: UserPublic }> =>
-    request(
-      `/v1/auth/login`,
-      { method: "POST", body: JSON.stringify(body) },
-      authMeSchema,
-    ),
-  logout: (): Promise<{ ok: true }> =>
-    request(
-      `/v1/auth/logout`,
-      { method: "POST" },
-      okResponseSchema,
-    ),
-  me: (): Promise<{ user: UserPublic }> =>
-    request(`/v1/auth/me`, { method: "GET" }, authMeSchema),
+  // ---- auth (feature 008: Clerk JWT) ----
+  /** `GET /v1/users/me` returns the flat `CurrentUserOut` projection. */
+  me: (): Promise<CurrentUser> =>
+    request(`/v1/users/me`, { method: "GET" }, currentUserSchema),
   updateMe: (body: UserUpdate): Promise<{ user: UserPublic }> =>
     request(
       `/v1/users/me`,
