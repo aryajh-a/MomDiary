@@ -3,8 +3,8 @@
 Status: draft v2 · Target cloud: Azure Commercial · Owner: platform/devops
 
 End-to-end deployment of every component in this repository to Azure.
-Locked stack: **App Service (Linux) + PostgreSQL Flexible Server B1ms +
-Cosmos DB serverless (chat sessions only) + Azure OpenAI + Static Web Apps +
+Locked stack: **App Service (Linux) + PostgreSQL Flexible Server B1ms
+(relational data AND chat sessions) + Azure OpenAI + Static Web Apps +
 Clerk for auth.** Single resource group per environment.
 
 ---
@@ -16,7 +16,7 @@ Clerk for auth.** Single resource group per environment.
 | 1 | Backend API (FastAPI + Microsoft Agent Framework) | [backend/](backend/) | **Azure App Service for Linux** (Python 3.12 built-in runtime) |
 | 2 | Frontend SPA (React + Vite) | [frontend/](frontend/) | **Azure Static Web Apps** (Standard) |
 | 3 | Relational database (users, babies, feeds, sleeps, poops, appointments) | [backend/alembic/](backend/alembic/) + SQLAlchemy models | **Azure Database for PostgreSQL Flexible Server — B1ms** |
-| 4 | Chat session store (currently in-process dict, see `003-chat-session-store`) | [backend/src/momdiary/services/](backend/src/momdiary/services/) | **Azure Cosmos DB for NoSQL — serverless** (single container, TTL) |
+| 4 | Chat session store (currently in-process dict, see `003-chat-session-store`) | [backend/src/momdiary/services/](backend/src/momdiary/services/) | **Same PostgreSQL Flexible Server** — new `chat_sessions` table with `JSONB` turns + background TTL sweep |
 | 5 | LLM | Called via `AzureOpenAIChatClient` + `DefaultAzureCredential` in [backend/src/momdiary/agents/diary_agent.py](backend/src/momdiary/agents/diary_agent.py) | **Azure OpenAI** (`gpt-4.1-mini` deployment) |
 | 6 | Auth | Clerk JWT verify + Svix webhook | **Clerk Cloud** (third-party SaaS, unchanged) |
 | 7 | Secrets | DB URL, Clerk keys, App Insights conn string | **Azure Key Vault** (RBAC) |
@@ -24,9 +24,17 @@ Clerk for auth.** Single resource group per environment.
 | 9 | DNS / TLS / WAF (prod) | `app.momdiary.example`, `api.momdiary.example` | **Azure Front Door Standard + WAF** |
 
 No Container Registry, no Container Apps, no VNet in this baseline — App
-Service runs your code directly, Postgres uses Public Access + firewall + SSL,
-Cosmos uses its public endpoint with key/AAD auth. Add Private Endpoints
-later when compliance requires it.
+Service runs your code directly and Postgres uses Public Access + firewall + SSL.
+Add Private Endpoints later when compliance requires it.
+
+> **Why no Cosmos / Redis for sessions?** At MomDiary's scale (≤100
+> concurrent caregivers, ~1 chat write/sec peak, ≤50 turns × ~1 KB per
+> session) Postgres handles the workload trivially with a single `JSONB`
+> table and a TTL sweep, saving the $5–20/mo Cosmos serverless floor (or
+> the ~$16/mo Azure Cache for Redis Basic floor) and one entire service to
+> operate. Revisit when sustained chat write rate exceeds ~100/sec or you
+> add real-time features (pub/sub, multi-device sync) that genuinely need
+> Redis.
 
 ---
 
@@ -39,9 +47,8 @@ flowchart LR
   fd[Front Door + WAF<br/>prod only]
   swa[Static Web Apps<br/>React SPA]
   app[App Service Linux<br/>FastAPI + MAF]
-  pg[(PostgreSQL Flex<br/>B1ms)]
-  cos[(Cosmos DB<br/>serverless<br/>chat_sessions)]
-  aoai[(Azure OpenAI<br/>gpt-4.1)]
+  pg[(PostgreSQL Flex<br/>B1ms<br/>relational + chat_sessions)]
+  aoai[(Azure OpenAI<br/>gpt-4.1-mini)]
   kv[(Key Vault)]
   ai[(App Insights<br/>+ Log Analytics)]
 
@@ -52,7 +59,6 @@ flowchart LR
   app -- verify JWT (JWKS) --> clerk
   clerk -- Svix webhook --> app
   app -- asyncpg --> pg
-  app -- azure-cosmos --> cos
   app -- Managed Identity --> aoai
   app -- Managed Identity --> kv
   app -- OTel/JSON logs --> ai
@@ -73,11 +79,8 @@ flowchart LR
 | User-assigned Managed Identity | n/a | `id-momdiary-api-<env>` |
 | Static Web App (frontend) | Standard | `swa-momdiary-<env>` |
 | PostgreSQL Flexible Server | **Burstable B1ms** + 32 GB storage | `psql-momdiary-<env>` |
-| PostgreSQL database | n/a | `momdiary` |
-| Cosmos DB account (NoSQL API) | **Serverless** | `cosmos-momdiary-<env>` |
-| Cosmos DB database | n/a | `momdiary` |
-| Cosmos DB container | `chat_sessions`, PK `/userId`, TTL on | n/a |
-| Azure OpenAI | S0 + `gpt-4.1` deployment | `aoai-momdiary-<env>` |
+| PostgreSQL database | n/a | `momdiary` (relational tables **and** `chat_sessions`) |
+| Azure OpenAI | S0 + `gpt-4.1-mini` deployment | `aoai-momdiary-<env>` |
 | Front Door + WAF (prod only) | Standard_AzureFrontDoor | `afd-momdiary-<env>` |
 
 Naming follows [CAF abbreviations](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations).
@@ -91,7 +94,7 @@ Naming follows [CAF abbreviations](https://learn.microsoft.com/azure/cloud-adopt
    `az cognitiveservices account list-skus --kind OpenAI -l <region>`.
 2. Request Azure OpenAI access + quota for `gpt-4.1`.
 3. Register providers: `Microsoft.Web`, `Microsoft.DBforPostgreSQL`,
-   `Microsoft.DocumentDB`, `Microsoft.CognitiveServices`, `Microsoft.KeyVault`,
+   `Microsoft.CognitiveServices`, `Microsoft.KeyVault`,
    `Microsoft.OperationalInsights`, `Microsoft.Insights`, `Microsoft.Cdn`.
 4. Create a Clerk **production** instance; capture `CLERK_SECRET_KEY`,
    `CLERK_JWT_ISSUER`, optional `CLERK_JWT_AUDIENCE`,
@@ -104,7 +107,7 @@ Naming follows [CAF abbreviations](https://learn.microsoft.com/azure/cloud-adopt
 
 These are the only non-trivial code edits. Everything else is config.
 
-### 5.1 Add asyncpg and azure-cosmos to dependencies
+### 5.1 Add asyncpg to dependencies
 
 In [backend/pyproject.toml](backend/pyproject.toml):
 
@@ -112,12 +115,13 @@ In [backend/pyproject.toml](backend/pyproject.toml):
 dependencies = [
   # ...existing...
   "asyncpg>=0.29",
-  "azure-cosmos>=4.7",
   "azure-monitor-opentelemetry>=1.6",
 ]
 ```
 
-`aiosqlite` stays as a dev/test dependency only.
+`aiosqlite` stays as a dev/test dependency only. No `azure-cosmos`,
+no `redis` — chat sessions live in the same Postgres instance as the
+relational tables (see §5.3).
 
 ### 5.2 Add a health endpoint
 
@@ -130,27 +134,62 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 ```
 
-### 5.3 Swap the in-process session store for Cosmos
+### 5.3 Swap the in-process session store for Postgres
 
 `003-chat-session-store` stores sessions in a Python dict — fine on a single
 worker, broken the moment App Service runs 2+ workers or instances.
-Implement a Cosmos-backed adapter in [backend/src/momdiary/services/](backend/src/momdiary/services/)
-with the same interface. Cosmos doc shape:
+Implement a Postgres-backed adapter in [backend/src/momdiary/services/](backend/src/momdiary/services/)
+with the same interface, backed by a new Alembic revision:
 
-```jsonc
-{
-  "id": "<sessionId>",         // partition key value lookup
-  "userId": "<clerkUserId>",   // partition key (/userId)
-  "babyId": "<babyId>",
-  "turns": [ /* caregiver+assistant pairs, FIFO-trimmed */ ],
-  "updatedAt": "2026-06-02T18:00:00Z",
-  "ttl": 86400                  // seconds — Cosmos auto-deletes idle sessions
-}
+```python
+op.create_table(
+    "chat_sessions",
+    sa.Column("session_id", sa.String(64), primary_key=True),
+    sa.Column("user_id", sa.String(64), nullable=False),
+    sa.Column("baby_id", sa.Integer, nullable=False),
+    sa.Column("turns", postgresql.JSONB, nullable=False, server_default="[]"),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False,
+              server_default=sa.func.now()),
+)
+op.create_index(
+    "ix_chat_sessions_user_baby_updated",
+    "chat_sessions",
+    ["user_id", "baby_id", "updated_at"],
+)
+op.create_index("ix_chat_sessions_updated_at", "chat_sessions", ["updated_at"])
 ```
 
-Native TTL replaces the manual cleanup loop. `MOMDIARY_SESSION_TTL_SECONDS`
-in [backend/src/momdiary/config.py](backend/src/momdiary/config.py) becomes
-the `ttl` written on each upsert.
+Write path: `INSERT ... ON CONFLICT (session_id) DO UPDATE SET turns = ..., updated_at = NOW()`.
+FIFO trim and per-message byte cap happen in Python before write (same
+logic as the in-process store).
+
+TTL: Postgres has no native TTL, so add **one** of the following. Pick (a)
+for simplicity:
+
+a. Background task in the app:
+   ```python
+   # backend/src/momdiary/services/session_ttl.py
+   async def sweep_expired_sessions() -> None:
+       while True:
+           await asyncio.sleep(600)  # every 10 min
+           async with sessionmaker() as db:
+               await db.execute(text(
+                   "DELETE FROM chat_sessions "
+                   "WHERE updated_at < NOW() - make_interval(secs => :ttl)"
+               ), {"ttl": settings.momdiary_session_ttl_seconds})
+               await db.commit()
+   ```
+   Launch from FastAPI lifespan; only one worker should run it (use
+   advisory lock `pg_try_advisory_lock(<const>)` to elect).
+
+b. `pg_cron` extension on Azure Postgres Flex (enable it on the server
+   parameter `azure.extensions`, then schedule the same `DELETE`).
+
+c. A GitHub Actions cron that calls a small admin endpoint nightly.
+
+`MOMDIARY_SESSION_TTL_SECONDS` in [backend/src/momdiary/config.py](backend/src/momdiary/config.py)
+drives the WHERE clause. No new env vars, no new Key Vault secrets, no
+new Azure resource.
 
 ### 5.4 Wire OpenTelemetry to App Insights
 
@@ -181,7 +220,6 @@ $pgAdmin   = "pgadmin"
 $pgPwd     = (New-Guid).Guid + "Aa1!"          # store in Key Vault immediately
 $appName   = "app-momdiary-api-$env"
 $pgName    = "psql-momdiary-$env"
-$cosName   = "cosmos-momdiary-$env"
 $kvName    = "kv-momdiary-$env"
 $aoaiName  = "aoai-momdiary-$env"
 $logName   = "log-momdiary-$env"
@@ -220,20 +258,12 @@ az postgres flexible-server create -g $rg -n $pgName -l $loc `
 az postgres flexible-server firewall-rule create -g $rg --name $pgName `
   --rule-name AllowAzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0
 
-# Cosmos DB serverless, NoSQL API
-az cosmosdb create -g $rg -n $cosName --kind GlobalDocumentDB `
-  --capabilities EnableServerless --default-consistency-level Session `
-  --locations regionName=$loc failoverPriority=0 isZoneRedundant=False
-az cosmosdb sql database create -g $rg -a $cosName -n momdiary
-az cosmosdb sql container create -g $rg -a $cosName -d momdiary -n chat_sessions `
-  --partition-key-path "/userId" --ttl 86400
-
-# Azure OpenAI + gpt-4.1 deployment
+# Azure OpenAI + gpt-4.1-mini deployment
 az cognitiveservices account create -g $rg -n $aoaiName -l $loc `
   --kind OpenAI --sku S0 --custom-domain $aoaiName --yes
 az cognitiveservices account deployment create -g $rg -n $aoaiName `
-  --deployment-name gpt-4.1 --model-name gpt-4.1 --model-version "2025-04-14" `
-  --model-format OpenAI --sku-capacity 50 --sku-name Standard
+  --deployment-name gpt-4.1-mini --model-name gpt-4.1-mini --model-version "2025-04-14" `
+  --model-format OpenAI --sku-capacity 50 --sku-name GlobalStandard
 
 # App Service plan + Linux web app (Python 3.12)
 az appservice plan create -g $rg -n "asp-momdiary-$env" --is-linux --sku B1
@@ -260,15 +290,11 @@ az role assignment create --assignee-object-id $uamiPid --assignee-principal-typ
   --role "Key Vault Secrets User" --scope $kvId
 ```
 
-For Cosmos use either (a) keep the connection string in Key Vault, or (b)
-assign the UAMI the **Cosmos DB Built-in Data Contributor** role:
-
-```powershell
-$cosId = az cosmosdb show -g $rg -n $cosName --query id -o tsv
-az cosmosdb sql role assignment create -g $rg -a $cosName `
-  --role-definition-id "00000000-0000-0000-0000-000000000002" `
-  --principal-id $uamiPid --scope $cosId
-```
+No data-plane role assignments are needed for Postgres — the app
+authenticates with the `pgAdmin` SQL login whose password lives in Key
+Vault (see §6.2). To move to passwordless Entra auth later, swap to
+`postgresql+asyncpg://...?sslmode=require` with `password=` filled by
+`DefaultAzureCredential().get_token("https://ossrdbms-aad.database.windows.net/.default")`.
 
 ### 6.2 Populate Key Vault
 
@@ -278,8 +304,6 @@ az keyvault secret set --vault-name $kvName --name momdiary-db-url      --value 
 az keyvault secret set --vault-name $kvName --name clerk-secret-key     --value "<sk_live_...>"
 az keyvault secret set --vault-name $kvName --name clerk-webhook-secret --value "<whsec_...>"
 az keyvault secret set --vault-name $kvName --name appi-conn-string     --value "$aiConn"
-$cosEndpoint = az cosmosdb show -g $rg -n $cosName --query documentEndpoint -o tsv
-az keyvault secret set --vault-name $kvName --name cosmos-endpoint      --value "$cosEndpoint"
 ```
 
 ### 6.3 App Service configuration
@@ -289,7 +313,7 @@ $kvUri = "https://$kvName.vault.azure.net"
 az webapp config appsettings set -g $rg -n $appName --settings `
   "AZURE_CLIENT_ID=$uamiCid" `
   "AZURE_OPENAI_ENDPOINT=https://$aoaiName.openai.azure.com/" `
-  "AZURE_OPENAI_DEPLOYMENT=gpt-4.1" `
+  "AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini" `
   "AZURE_OPENAI_API_VERSION=2024-10-21" `
   "MOMDIARY_APP_ENV=$env" `
   "MOMDIARY_DEFAULT_TIMEZONE=America/Los_Angeles" `
@@ -299,9 +323,6 @@ az webapp config appsettings set -g $rg -n $appName --settings `
   "CLERK_SECRET_KEY=@Microsoft.KeyVault(SecretUri=$kvUri/secrets/clerk-secret-key/)" `
   "CLERK_WEBHOOK_SECRET=@Microsoft.KeyVault(SecretUri=$kvUri/secrets/clerk-webhook-secret/)" `
   "APPLICATIONINSIGHTS_CONNECTION_STRING=@Microsoft.KeyVault(SecretUri=$kvUri/secrets/appi-conn-string/)" `
-  "MOMDIARY_COSMOS_ENDPOINT=@Microsoft.KeyVault(SecretUri=$kvUri/secrets/cosmos-endpoint/)" `
-  "MOMDIARY_COSMOS_DB=momdiary" `
-  "MOMDIARY_COSMOS_CONTAINER=chat_sessions" `
   "SCM_DO_BUILD_DURING_DEPLOYMENT=true"
 
 # Startup command — uvicorn on App Service's $PORT (defaults to 8000)
@@ -413,13 +434,14 @@ Skip for `dev`. For `prod`:
     --logs '[{"category":"AppServiceConsoleLogs","enabled":true},
               {"category":"AppServiceHTTPLogs","enabled":true}]'
   ```
-  Repeat for Postgres, Cosmos, AOAI, Key Vault.
+  Repeat for Postgres, AOAI, Key Vault.
 - Alerts to create (in App Insights):
   - Failed request rate > 1% over 5 min
   - `/v1/entries` p95 latency > 3 s
   - AOAI 429 / 5xx > 0 over 5 min
   - Postgres CPU > 80% sustained 10 min
-  - Cosmos 429 rate > 0 (means you've hit serverless throttling)
+  - Postgres active connections > 40 (B1ms cap is ~50)
+  - `chat_sessions` row count > 10K (TTL sweep stuck)
 
 ---
 
@@ -428,14 +450,13 @@ Skip for `dev`. For `prod`:
 | Resource | Dev $/mo | Prod $/mo |
 |----------|---------:|----------:|
 | App Service plan (B1 dev, P0v3 prod) | $13 | $54 |
-| PostgreSQL Flex **B1ms** + 32 GB storage + LRS backup | $16 | $16 (or B2s $28 if you grow) |
-| Cosmos DB serverless (sessions only) | $1–5 | $5–20 |
+| PostgreSQL Flex **B1ms** + 32 GB storage + LRS backup (relational + sessions) | $16 | $16 (or B2s $28 if you grow) |
 | Static Web Apps Standard | $9 | $9 |
-| Azure OpenAI gpt-4.1 | usage | usage |
+| Azure OpenAI gpt-4.1-mini | usage (~$3.60 / 10K turns) | usage |
 | Key Vault | <$1 | <$1 |
 | Log Analytics + App Insights | $5–20 | $20–100 |
 | Front Door Standard | — | $35 + egress |
-| **Floor (no AOAI usage)** | **~$45/mo** | **~$145/mo** |
+| **Floor (no AOAI usage)** | **~$44/mo** | **~$135/mo** |
 
 `B1ms` Postgres is sized for **≤100 concurrent caregivers / low write
 traffic**. Move to `B2s` ($28/mo) or `D2ds_v5` ($113/mo) when CPU credits
@@ -459,11 +480,11 @@ Wire to a Logic App schedule or a GitHub Actions cron — brings dev DB to
 
 ## 12. Environments and promotion
 
-| Env | App plan | Postgres | Cosmos | Front Door | DNS |
-|-----|----------|----------|--------|-----------|-----|
-| `dev` | B1 | B1ms (scheduled stop) | serverless | no | `app-…-dev.azurewebsites.net` |
-| `stg` | B2 | B1ms (always on) | serverless | optional | `stg.app.momdiary.example` |
-| `prod` | P0v3 (zone-redundant) | B2s + HA *or* D2ds_v5 + HA | serverless | yes | `app.momdiary.example` |
+| Env | App plan | Postgres | Front Door | DNS |
+|-----|----------|----------|-----------|-----|
+| `dev` | B1 | B1ms (scheduled stop) | no | `app-…-dev.azurewebsites.net` |
+| `stg` | B2 | B1ms (always on) | optional | `stg.app.momdiary.example` |
+| `prod` | P0v3 (zone-redundant) | B2s + HA *or* D2ds_v5 + HA | yes | `app.momdiary.example` |
 
 Promote by re-running the same provisioning script with `$env="stg"` /
 `$env="prod"` and re-deploying the same git SHA.
@@ -473,8 +494,9 @@ Promote by re-running the same provisioning script with `$env="stg"` /
 ## 13. Security checklist
 
 - [ ] App Service `https-only=true`, `minTlsVersion=1.2`
-- [ ] Managed identity used for AOAI, Cosmos (data plane), Key Vault — no
-      keys in env vars
+- [ ] Managed identity used for AOAI and Key Vault — no keys in env vars
+      (Postgres still uses SQL auth via Key Vault-stored URL; move to
+      Entra passwordless later)
 - [ ] Postgres `ssl=require` in connection string
 - [ ] Postgres firewall = App Service outbound IPs only (not 0.0.0.0)
 - [ ] Key Vault RBAC, soft-delete + purge protection
@@ -490,9 +512,9 @@ Promote by re-running the same provisioning script with `$env="stg"` /
 
 - **Postgres**: 7-day PITR by default. Bump prod to 35-day + geo-redundant
   backups. Document the `az postgres flexible-server restore` runbook.
-- **Cosmos**: serverless gets periodic backups every 4h, restorable for 8h
-  by default. Bump to "continuous backup" for prod (~$$$ per GB) — or accept
-  that sessions are ephemeral and don't need restore.
+  Note that `chat_sessions` is included in PITR for free — but since
+  sessions are ephemeral (24h TTL), exclude them from any logical restore
+  by truncating after recovery if desired.
 - **App Service**: source-controlled; redeploy from a known git SHA. Keep
   the last 5 zip artefacts in a Storage container.
 - Run a **quarterly DR drill** in a sandbox RG.
