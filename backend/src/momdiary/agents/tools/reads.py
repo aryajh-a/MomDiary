@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import date as _date
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from momdiary.agents.tools import appointments as _appts
 from momdiary.agents.tools import feeds as _feeds
 from momdiary.agents.tools import poops as _poops
 from momdiary.agents.tools import sleeps as _sleeps
+from momdiary.auth.context import get_active_user_timezone
 from momdiary.db.repositories.appointments import AppointmentsRepository
 from momdiary.db.repositories.feeds import FeedsRepository
 from momdiary.db.repositories.poops import PoopsRepository
@@ -32,12 +34,22 @@ from momdiary.services.time_service import get_default_timezone
 class ListByDateArgs(BaseModel):
     """Shared argument schema for all four list_* tools."""
 
-    date: str | None = None  # YYYY-MM-DD in the default local timezone; defaults to today
+    date: str | None = None  # YYYY-MM-DD in the caregiver's timezone; defaults to today
+
+
+async def _resolve_tz(session: AsyncSession) -> ZoneInfo:
+    """Feature 007: prefer the per-request caregiver TZ contextvar, else default.
+
+    Agent tools run inside a chat turn that the auth dependency has already
+    processed, so the contextvar is normally populated. The fallback keeps the
+    tools working in any context (tests, no-user) where it isn't.
+    """
+    return get_active_user_timezone() or await get_default_timezone(session)
 
 
 async def _resolve_date(session: AsyncSession, raw: str | None) -> _date:
     if raw is None or raw.strip() == "":
-        tz = await get_default_timezone(session)
+        tz = await _resolve_tz(session)
         return datetime.now(tz).date()
     # Accept "YYYY-MM-DD" strictly; let ValueError bubble up so the wrapper
     # can surface a useful error message to the model.
@@ -50,19 +62,22 @@ def _envelope(d: _date, items: list[dict[str, Any]]) -> dict[str, Any]:
 
 async def list_feeds(session: AsyncSession, *, date: str | None = None) -> dict[str, Any]:
     d = await _resolve_date(session, date)
-    rows = await FeedsRepository(session).list_by_date(d)
+    tz = await _resolve_tz(session)
+    rows = await FeedsRepository(session).list_by_date(d, tz)
     return _envelope(d, [_feeds._to_entry(r) for r in rows])
 
 
 async def list_sleeps(session: AsyncSession, *, date: str | None = None) -> dict[str, Any]:
     d = await _resolve_date(session, date)
-    rows = await SleepsRepository(session).list_by_start_date(d)
+    tz = await _resolve_tz(session)
+    rows = await SleepsRepository(session).list_by_start_date(d, tz)
     return _envelope(d, [_sleeps._to_entry(r) for r in rows])
 
 
 async def list_poops(session: AsyncSession, *, date: str | None = None) -> dict[str, Any]:
     d = await _resolve_date(session, date)
-    rows = await PoopsRepository(session).list_by_date(d)
+    tz = await _resolve_tz(session)
+    rows = await PoopsRepository(session).list_by_date(d, tz)
     return _envelope(d, [_poops._to_entry(r) for r in rows])
 
 
@@ -70,5 +85,6 @@ async def list_appointments(
     session: AsyncSession, *, date: str | None = None
 ) -> dict[str, Any]:
     d = await _resolve_date(session, date)
-    rows = await AppointmentsRepository(session).list_by_date(d)
+    tz = await _resolve_tz(session)
+    rows = await AppointmentsRepository(session).list_by_date(d, tz)
     return _envelope(d, [_appts._to_entry(r) for r in rows])

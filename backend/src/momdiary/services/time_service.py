@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.config import get_settings
-from momdiary.models.orm import SettingsRow
+from momdiary.models.orm import SettingsRow, User
+from momdiary.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 _cached_tz: ZoneInfo | None = None
 
@@ -29,6 +32,26 @@ async def get_default_timezone(session: AsyncSession) -> ZoneInfo:
     tz_name = row.default_timezone if row else get_settings().momdiary_default_timezone
     _cached_tz = ZoneInfo(tz_name)
     return _cached_tz
+
+
+async def get_user_timezone(session: AsyncSession, user: User) -> ZoneInfo:
+    """Return the caregiver's IANA timezone (feature 007).
+
+    If the user has no stored TZ (legacy null, or a buggy client never sent
+    one) we fall back to the system default. An invalid IANA string is also
+    treated as "no preference" and logged so the bad value can be diagnosed
+    after the fact.
+    """
+    if user.timezone:
+        try:
+            return ZoneInfo(user.timezone)
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "user.timezone.invalid",
+                user_id=user.id,
+                value=user.timezone,
+            )
+    return await get_default_timezone(session)
 
 
 def reset_timezone_cache() -> None:

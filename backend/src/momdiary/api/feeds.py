@@ -8,11 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from momdiary.auth.dependencies import ActiveBabyDep
+from momdiary.auth.dependencies import ActiveBabyDep, CurrentUserDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.feeds import FeedsRepository, FeedValidationError
 from momdiary.models.schemas import FeedCreate, FeedEntry, FeedListResponse, FeedUpdate
 from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import get_user_timezone
 
 logger = get_logger(__name__)
 
@@ -65,9 +66,11 @@ async def create_feed(
 async def list_feeds(
     date: Annotated[date_cls, Query(description="Local calendar date.")],
     session: Annotated[AsyncSession, Depends(get_session)],
+    auth: CurrentUserDep,
     baby: ActiveBabyDep,
 ) -> FeedListResponse:
-    rows = await FeedsRepository(session).list_by_date(date)
+    tz = await get_user_timezone(session, auth.user)
+    rows = await FeedsRepository(session).list_by_date(date, tz)
     logger.info("feeds.list", date=date.isoformat(), baby_id=baby.id, count=len(rows))
     return FeedListResponse(date=date.isoformat(), items=[_to_entry(r) for r in rows])
 

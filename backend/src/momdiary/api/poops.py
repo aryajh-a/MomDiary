@@ -8,11 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from momdiary.auth.dependencies import ActiveBabyDep
+from momdiary.auth.dependencies import ActiveBabyDep, CurrentUserDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.poops import PoopsRepository, PoopValidationError
 from momdiary.models.schemas import PoopCreate, PoopEntry, PoopListResponse, PoopUpdate
 from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import get_user_timezone
 
 logger = get_logger(__name__)
 
@@ -61,9 +62,11 @@ async def create_poop(
 async def list_poops(
     date: Annotated[date_cls, Query(description="Local calendar date.")],
     session: Annotated[AsyncSession, Depends(get_session)],
+    auth: CurrentUserDep,
     baby: ActiveBabyDep,
 ) -> PoopListResponse:
-    rows = await PoopsRepository(session).list_by_date(date)
+    tz = await get_user_timezone(session, auth.user)
+    rows = await PoopsRepository(session).list_by_date(date, tz)
     logger.info("poops.list", date=date.isoformat(), baby_id=baby.id, count=len(rows))
     return PoopListResponse(date=date.isoformat(), items=[_to_entry(r) for r in rows])
 

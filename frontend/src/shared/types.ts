@@ -276,6 +276,9 @@ export const userPublicSchema = z.object({
   email: emailSchema,
   display_name: displayNameSchema,
   active_baby_id: z.number().int().positive().nullable(),
+  // Feature 007: IANA zone the backend resolved for this user. Nullable for
+  // legacy/defensive cases where the client never sent one.
+  timezone: z.string().nullable().optional(),
 });
 export type UserPublic = z.infer<typeof userPublicSchema>;
 
@@ -285,12 +288,18 @@ export const registerRequestSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   display_name: displayNameSchema,
+  // Browser-detected IANA timezone (feature 007). Optional so older clients
+  // still validate; the SignupPage always attaches it.
+  timezone: z.string().optional(),
 });
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 
 export const loginRequestSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
+  // Browser-detected IANA timezone (feature 007); refreshes the stored value
+  // on the backend if it has drifted.
+  timezone: z.string().optional(),
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 

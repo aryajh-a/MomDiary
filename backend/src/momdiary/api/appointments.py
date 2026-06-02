@@ -8,12 +8,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from momdiary.auth.dependencies import ActiveBabyDep
+from momdiary.auth.dependencies import ActiveBabyDep, CurrentUserDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.appointments import (
     AppointmentsRepository,
     AppointmentValidationError,
 )
+from momdiary.services.time_service import get_user_timezone
 from momdiary.models.schemas import (
     AppointmentCreate,
     AppointmentEntry,
@@ -77,9 +78,11 @@ async def create_appointment(
 async def list_appointments(
     date: Annotated[date_cls, Query(description="Local calendar date.")],
     session: Annotated[AsyncSession, Depends(get_session)],
+    auth: CurrentUserDep,
     baby: ActiveBabyDep,
 ) -> AppointmentListResponse:
-    rows = await AppointmentsRepository(session).list_by_date(date)
+    tz = await get_user_timezone(session, auth.user)
+    rows = await AppointmentsRepository(session).list_by_date(date, tz)
     logger.info("appointments.list", date=date.isoformat(), baby_id=baby.id, count=len(rows))
     return AppointmentListResponse(
         date=date.isoformat(), items=[_to_entry(r) for r in rows]

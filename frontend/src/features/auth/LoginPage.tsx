@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiError } from "@/shared/apiClient";
+import { detectBrowserTimezone } from "@/shared/time";
 import { useLoginMutation } from "./useSession";
 
 export function LoginPage(props: { onSwitchToSignup: () => void }): JSX.Element {
@@ -11,7 +12,7 @@ export function LoginPage(props: { onSwitchToSignup: () => void }): JSX.Element 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (login.isPending) return;
-    login.mutate({ email: email.trim(), password });
+    login.mutate({ email: email.trim(), password, timezone: detectBrowserTimezone() });
   };
 
   const errMsg =

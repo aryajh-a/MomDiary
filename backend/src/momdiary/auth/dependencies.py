@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 from fastapi import Cookie, Depends, Header, HTTPException, Request
@@ -16,7 +17,7 @@ from momdiary.db.engine import get_session
 from momdiary.models.orm import Baby, User
 from momdiary.observability.middleware import current_correlation_id
 
-from momdiary.auth.context import set_active_baby_id
+from momdiary.auth.context import set_active_baby_id, set_active_user_timezone
 
 
 def _error(status: int, code: str, message: str) -> HTTPException:
@@ -73,6 +74,20 @@ async def current_user(
     # Bind into structlog contextvars so every downstream log line in this
     # request automatically carries `user_id` (FR-022 / T071).
     structlog.contextvars.bind_contextvars(user_id=user.id)
+    # Feature 007: stash the resolved caregiver TZ on a contextvar so
+    # contextvar-only consumers (agent read tools, MAF context formatter)
+    # can pick it up without threading the User object through.
+    tz_obj: ZoneInfo | None = None
+    if user.timezone:
+        try:
+            tz_obj = ZoneInfo(user.timezone)
+        except ZoneInfoNotFoundError:
+            # Invalid IANA string on the row — leave the contextvar None so
+            # downstream falls back to the system default.
+            tz_obj = None
+    set_active_user_timezone(tz_obj)
+    if user.timezone:
+        structlog.contextvars.bind_contextvars(user_timezone=user.timezone)
     return AuthContext(user=user, session_token=token)
 
 

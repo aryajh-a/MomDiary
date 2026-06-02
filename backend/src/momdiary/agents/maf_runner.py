@@ -22,6 +22,7 @@ from momdiary.agents.tools.registry import (
     TOOL_REGISTRY,
     invoke_tool,
 )
+from momdiary.auth.context import get_active_user_timezone
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import get_default_timezone
 
@@ -220,7 +221,9 @@ def _build_tool_wrappers(
 async def _format_context(
     session: AsyncSession, entry_id: int | None, entry_type: str | None
 ) -> str:
-    tz = await get_default_timezone(session)
+    # Feature 007: use the caregiver's TZ (set on a contextvar by the auth
+    # dependency) so the injected "Current local time:" matches where they are.
+    tz = get_active_user_timezone() or await get_default_timezone(session)
     now_local = datetime.now(tz)
     lines = [
         f"Current local time: {now_local.isoformat(timespec='seconds')} ({tz.key}).",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
@@ -23,6 +24,21 @@ from momdiary.schemas.auth import (
     RegisterRequest,
     UserPublic,
 )
+
+
+def _valid_timezone(value: str | None) -> str | None:
+    """Return `value` if it's a valid IANA zone, else None (FR-008).
+
+    Invalid TZ strings are silently dropped — never a 4xx response — so a
+    buggy client can never block sign-up/sign-in.
+    """
+    if not value:
+        return None
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError:
+        return None
+    return value
 
 logger = get_logger(__name__)
 
@@ -67,6 +83,7 @@ def _public(user: User) -> UserPublic:
         email=user.email,
         display_name=user.display_name,
         active_baby_id=user.active_baby_id,
+        timezone=user.timezone,
     )
 
 
@@ -100,6 +117,7 @@ async def register(
         email=payload.email,
         password_hash=hasher.hash(payload.password),
         display_name=payload.display_name,
+        timezone=_valid_timezone(payload.timezone),
     )
     db.add(user)
     try:
@@ -150,6 +168,19 @@ async def login(
     # Opportunistic rehash if the cost parameters have been raised.
     if hasher.needs_rehash(user.password_hash):
         user.password_hash = hasher.hash(payload.password)
+        await db.flush()
+
+    # Feature 007: refresh the stored TZ if the browser sent a valid one and
+    # it differs from the persisted value (or the persisted value is null).
+    incoming_tz = _valid_timezone(payload.timezone)
+    if incoming_tz is not None and incoming_tz != user.timezone:
+        logger.info(
+            "auth.login.timezone_updated",
+            user_id=user.id,
+            old=user.timezone,
+            new=incoming_tz,
+        )
+        user.timezone = incoming_tz
         await db.flush()
 
     sessions = SessionService(db, ttl_days=settings.momdiary_session_cookie_ttl_days)

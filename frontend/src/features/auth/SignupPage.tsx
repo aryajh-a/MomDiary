@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiError } from "@/shared/apiClient";
+import { detectBrowserTimezone } from "@/shared/time";
 import { useRegisterMutation } from "./useSession";
 
 export function SignupPage(props: { onSwitchToLogin: () => void }): JSX.Element {
@@ -16,6 +17,7 @@ export function SignupPage(props: { onSwitchToLogin: () => void }): JSX.Element 
       email: email.trim(),
       password,
       display_name: displayName.trim(),
+      timezone: detectBrowserTimezone(),
     });
   };
 

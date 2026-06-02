@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,6 @@ from momdiary.models.orm import Sleep
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
     parse_iso_with_offset,
     to_iso,
 )
@@ -69,9 +69,8 @@ class SleepsRepository:
             return None
         return row
 
-    async def list_by_start_date(self, d: date) -> list[Sleep]:
+    async def list_by_start_date(self, d: date, tz: ZoneInfo) -> list[Sleep]:
         """FR-009: assign session to its start_at local date."""
-        tz = await get_default_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(

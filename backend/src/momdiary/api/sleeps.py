@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from momdiary.auth.dependencies import ActiveBabyDep
+from momdiary.auth.dependencies import ActiveBabyDep, CurrentUserDep
 from momdiary.db.engine import get_session
 from momdiary.db.repositories.sleeps import (
     SleepsRepository,
@@ -17,6 +17,7 @@ from momdiary.db.repositories.sleeps import (
 )
 from momdiary.models.schemas import SleepCreate, SleepEntry, SleepListResponse, SleepUpdate
 from momdiary.observability.logging import get_logger
+from momdiary.services.time_service import get_user_timezone
 
 logger = get_logger(__name__)
 
@@ -66,9 +67,11 @@ async def create_sleep(
 async def list_sleeps(
     date: Annotated[date_cls, Query(description="Local calendar date.")],
     session: Annotated[AsyncSession, Depends(get_session)],
+    auth: CurrentUserDep,
     baby: ActiveBabyDep,
 ) -> SleepListResponse:
-    rows = await SleepsRepository(session).list_by_start_date(date)
+    tz = await get_user_timezone(session, auth.user)
+    rows = await SleepsRepository(session).list_by_start_date(date, tz)
     logger.info("sleeps.list", date=date.isoformat(), baby_id=baby.id, count=len(rows))
     return SleepListResponse(date=date.isoformat(), items=[_to_entry(r) for r in rows])
 

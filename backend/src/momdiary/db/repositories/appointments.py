@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,6 @@ from momdiary.models.orm import Appointment, AppointmentNote
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
     parse_iso_with_offset,
     to_iso,
 )
@@ -92,8 +92,7 @@ class AppointmentsRepository:
             return None
         return row
 
-    async def list_by_date(self, d: date) -> list[Appointment]:
-        tz = await get_default_timezone(self._session)
+    async def list_by_date(self, d: date, tz: ZoneInfo) -> list[Appointment]:
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(
