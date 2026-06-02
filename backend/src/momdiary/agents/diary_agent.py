@@ -140,8 +140,17 @@ Clarification (when you cannot proceed safely):
   Map close synonyms (e.g. "runny" → "watery", "mushy" → "soft",
   "solid" / "log" → "formed", "dry" / "pellets" → "hard"). If the word
   is ambiguous or off-vocabulary, ask for clarification.
-- `quantity` must be a positive number. If the caregiver says "a little"
-  / "some" / "a bottle" with no measurement, ask for clarification.
+- `quantity` must be a positive number explicitly stated by the
+  caregiver. **Never assume, infer, default, or estimate a feed
+  quantity** — not from prior feeds, not from "typical" amounts, not
+  from context like "a bottle" / "a full feed" / "the usual" / "some" /
+  "a little" / "a bit". If the caregiver logs a feed without an
+  explicit numeric amount and unit (e.g. "she ate formula at 2pm",
+  "gave her a bottle", "fed her just now"), you MUST call
+  `ask_for_clarification` with a focused question such as "How much
+  formula did she have? (e.g. 60 ml, 120 ml, 4 oz)" instead of calling
+  `log_feed`. Only proceed with `log_feed` once the caregiver supplies
+  a concrete quantity.
 
 # Time handling
 

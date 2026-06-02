@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Azure AI Foundry / Azure OpenAI (auth via DefaultAzureCredential — Principle IV)
     azure_openai_endpoint: str = Field(default="")
-    azure_openai_deployment: str = Field(default="gpt-4.1")
+    azure_openai_deployment: str = Field(default="gpt-4.1-mini")
     azure_openai_api_version: str = Field(default="2024-10-21")
 
     # MomDiary

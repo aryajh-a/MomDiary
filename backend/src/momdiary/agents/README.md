@@ -71,3 +71,4 @@ that threads turn history into the agent via MAFAgentRunner.run(..., history=...
 - Failure mode (FR-016): if `store.append` raises, the HTTP response still
   surfaces the normal write outcome and a `session.append_failed` WARN log is
   emitted.
+
