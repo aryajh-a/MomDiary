@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -12,7 +13,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
 from momdiary.config import get_settings
-from momdiary.db.engine import dispose_engine
+from momdiary.db.engine import dispose_engine, get_session_factory
 from momdiary.observability.logging import configure_logging, get_logger
 from momdiary.observability.middleware import CorrelationIdMiddleware
 
@@ -22,11 +23,35 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
+    settings = get_settings()
     logger.info("app.startup", title=app.title, version=app.version)
+
+    sweeper_task: asyncio.Task[None] | None = None
+    # Feature 009: start the chat-session TTL sweeper only when we're on
+    # the Postgres backend. The in-memory store does its own lazy sweep
+    # on every `get_or_create` and needs no background work.
+    if settings.momdiary_session_store == "postgres":
+        from momdiary.agents.session_sweeper import run_session_ttl_sweeper
+
+        sweeper_task = asyncio.create_task(
+            run_session_ttl_sweeper(
+                get_session_factory(),
+                ttl_seconds=settings.momdiary_session_ttl_seconds,
+                interval_seconds=settings.momdiary_session_sweep_interval_seconds,
+            ),
+            name="chat-session-ttl-sweeper",
+        )
+
     try:
         yield
     finally:
         logger.info("app.shutdown")
+        if sweeper_task is not None:
+            sweeper_task.cancel()
+            try:
+                await sweeper_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         await dispose_engine()
 
 
