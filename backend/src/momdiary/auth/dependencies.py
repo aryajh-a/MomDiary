@@ -24,10 +24,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.clerk import ClerkAuthError, ClerkClaims, verify_clerk_jwt
-from momdiary.auth.context import set_active_baby_id
+from momdiary.auth.context import set_active_baby_id, set_active_user_timezone
 from momdiary.db.engine import get_session
 from momdiary.models.orm import Baby, User
 from momdiary.observability.middleware import current_correlation_id
+from momdiary.services.time_service import parse_zoneinfo_or_none
 
 
 def _utcnow_iso() -> str:
@@ -122,6 +123,10 @@ async def get_current_user(
         if mutated:
             user.updated_at = _utcnow_iso()
             await db.commit()
+
+    # Feature 009: publish the caregiver's timezone for this request so
+    # repositories and the agent resolve date windows in their zone.
+    set_active_user_timezone(parse_zoneinfo_or_none(user.timezone))
 
     request.state.user_id = user.id
     request.state.clerk_user_id = claims.sub

@@ -276,6 +276,8 @@ export const userPublicSchema = z.object({
   display_name: displayNameSchema,
   email_verified: z.boolean(),
   active_baby_id: z.number().int().positive().nullable(),
+  // Feature 009: caregiver's IANA timezone (nullable until first captured).
+  timezone: z.string().nullable().optional(),
 });
 export type UserPublic = z.infer<typeof userPublicSchema>;
 
@@ -287,6 +289,8 @@ export const currentUserSchema = z.object({
   email_verified: z.boolean(),
   display_name: displayNameSchema,
   active_baby_id: z.number().int().positive().nullable(),
+  // Feature 009: caregiver's IANA timezone (nullable until first captured).
+  timezone: z.string().nullable().optional(),
 });
 export type CurrentUser = z.infer<typeof currentUserSchema>;
 
@@ -294,7 +298,9 @@ export type CurrentUser = z.infer<typeof currentUserSchema>;
 export const authMeSchema = z.object({ user: userPublicSchema });
 
 export const userUpdateSchema = z.object({
-  display_name: displayNameSchema,
+  // Both optional (feature 009): a timezone-only PATCH is valid.
+  display_name: displayNameSchema.optional(),
+  timezone: z.string().optional(),
 });
 export type UserUpdate = z.infer<typeof userUpdateSchema>;
 

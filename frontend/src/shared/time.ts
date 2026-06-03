@@ -52,3 +52,15 @@ export function fromDatetimeLocalInputValue(value: string): string | null {
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
 }
+
+/** The browser's current IANA timezone (e.g. "Asia/Kolkata"), or undefined if
+ *  the environment can't report one. Sent to PATCH /v1/users/me after sign-in
+ *  so the backend scopes each caregiver's day boundaries to where they are
+ *  (feature 009). */
+export function detectBrowserTimezone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}

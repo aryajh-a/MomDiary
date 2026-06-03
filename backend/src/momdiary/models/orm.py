@@ -54,6 +54,10 @@ class User(Base):
         ForeignKey("babies.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
     )
+    # IANA zone name (e.g. "Asia/Kolkata"). Feature 009 — captured from the
+    # browser via PATCH /v1/users/me. NULL means "fall back to the system
+    # default timezone" (services.time_service.get_request_timezone).
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
     deleted_at: Mapped[str | None] = mapped_column(Text, nullable=True)

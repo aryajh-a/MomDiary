@@ -12,9 +12,10 @@ from momdiary.models.orm import Sleep
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
+    get_request_timezone,
     parse_iso_with_offset,
     to_iso,
+    to_utc_iso,
 )
 
 logger = get_logger(__name__)
@@ -44,6 +45,8 @@ class SleepsRepository:
 
     async def create(self, *, start_at: str, end_at: str) -> Sleep:
         _validate(start_at, end_at)
+        start_at = to_utc_iso(start_at)
+        end_at = to_utc_iso(end_at)
         row = Sleep(
             baby_id=require_active_baby_id(),
             start_at=start_at,
@@ -71,7 +74,7 @@ class SleepsRepository:
 
     async def list_by_start_date(self, d: date) -> list[Sleep]:
         """FR-009: assign session to its start_at local date."""
-        tz = await get_default_timezone(self._session)
+        tz = await get_request_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(
@@ -101,6 +104,8 @@ class SleepsRepository:
         new_start = start_at if start_at is not None else row.start_at
         new_end = end_at if end_at is not None else row.end_at
         _validate(new_start, new_end)
+        new_start = to_utc_iso(new_start)
+        new_end = to_utc_iso(new_end)
         if new_start == row.start_at and new_end == row.end_at:
             logger.info("sleeps.update.unchanged", entry_id=entry_id)
             return row, True

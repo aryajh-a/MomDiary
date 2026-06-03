@@ -14,6 +14,7 @@ from momdiary.db.engine import get_session
 from momdiary.observability.middleware import current_correlation_id
 from momdiary.schemas.auth import AuthSessionInfo, CurrentUserOut, UserPublic
 from momdiary.schemas.users import SetActiveBabyRequest, UserUpdate
+from momdiary.services.time_service import parse_zoneinfo_or_none
 
 router = APIRouter(tags=["users"], prefix="/users")
 
@@ -36,6 +37,7 @@ def _public(user, *, email_verified: bool) -> UserPublic:  # type: ignore[no-unt
         display_name=user.display_name,
         email_verified=email_verified,
         active_baby_id=user.active_baby_id,
+        timezone=user.timezone,
     )
 
 
@@ -54,6 +56,7 @@ async def get_me(current: CurrentUserDep) -> CurrentUserOut:
         email_verified=current.email_verified,
         display_name=user.display_name,
         active_baby_id=user.active_baby_id,
+        timezone=user.timezone,
     )
 
 
@@ -63,8 +66,19 @@ async def _apply_profile_update(
     db: AsyncSession,
 ) -> AuthSessionInfo:
     user = current.user
-    if payload.display_name != user.display_name:
+    changed = False
+    # display_name is now optional (feature 009) — only touch it when sent,
+    # so a timezone-only PATCH doesn't blank the name.
+    if payload.display_name is not None and payload.display_name != user.display_name:
         user.display_name = payload.display_name
+        changed = True
+    # timezone capture (feature 009): store only when it parses and differs.
+    # An invalid zone is silently ignored (FR-002).
+    if payload.timezone is not None and parse_zoneinfo_or_none(payload.timezone) is not None:
+        if payload.timezone != user.timezone:
+            user.timezone = payload.timezone
+            changed = True
+    if changed:
         user.updated_at = _utcnow_iso()
         await db.commit()
     return AuthSessionInfo(user=_public(user, email_verified=current.email_verified))
