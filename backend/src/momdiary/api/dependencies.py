@@ -14,22 +14,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from momdiary.agents.dispatcher import AgentDispatcher, AgentRunner
 from momdiary.agents.session_store import InMemorySessionStore, SessionStore
 from momdiary.config import get_settings
-from momdiary.db.engine import get_session
+from momdiary.db.engine import get_session, get_session_factory
 
-_session_store: InMemorySessionStore | None = None
+_session_store: SessionStore | None = None
 
 
 def get_session_store() -> SessionStore:
-    """Return the process-lifetime in-memory session store (feature 003)."""
+    """Return the process-lifetime SessionStore (feature 003 + 009).
+
+    Backend is selected by `MOMDIARY_SESSION_STORE`:
+      * "postgres" (default): `PgSessionStore` — restart-survivable, shared
+        across workers.
+      * "memory": `InMemorySessionStore` — process-local, used by unit tests
+        that don't need a DB.
+    """
     global _session_store
     if _session_store is None:
         settings = get_settings()
-        _session_store = InMemorySessionStore(
-            ttl_seconds=settings.momdiary_session_ttl_seconds,
-            max_turns=settings.momdiary_session_max_turns,
-            max_sessions=settings.momdiary_session_max_sessions,
-            message_max_bytes=settings.momdiary_session_message_max_bytes,
-        )
+        if settings.momdiary_session_store == "postgres":
+            # Lazy import: avoids pulling SQLAlchemy into pure-unit tests
+            # that set MOMDIARY_SESSION_STORE=memory.
+            from momdiary.agents.pg_session_store import PgSessionStore
+
+            _session_store = PgSessionStore(
+                session_factory=get_session_factory(),
+                ttl_seconds=settings.momdiary_session_ttl_seconds,
+                max_turns=settings.momdiary_session_max_turns,
+                max_sessions=settings.momdiary_session_max_sessions,
+                message_max_bytes=settings.momdiary_session_message_max_bytes,
+            )
+        else:
+            _session_store = InMemorySessionStore(
+                ttl_seconds=settings.momdiary_session_ttl_seconds,
+                max_turns=settings.momdiary_session_max_turns,
+                max_sessions=settings.momdiary_session_max_sessions,
+                message_max_bytes=settings.momdiary_session_message_max_bytes,
+            )
     return _session_store
 
 

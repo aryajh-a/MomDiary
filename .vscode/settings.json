@@ -25,7 +25,8 @@
             "approve": true,
             "matchCommandLine": true
         },
-        "Set-Content": true
+        "Set-Content": true,
+        "git checkout": true
     }
 }
 

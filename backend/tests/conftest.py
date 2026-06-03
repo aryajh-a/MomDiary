@@ -28,26 +28,81 @@ from momdiary.services.time_service import reset_timezone_cache
 
 
 # ---------------------------------------------------------------------------
-# Ephemeral SQLite + migrations
+# Ephemeral Postgres schema + migrations (feature 009)
 # ---------------------------------------------------------------------------
+#
+# Strategy: every test gets its own Postgres SCHEMA inside the shared test
+# database, so parallel tests can run without colliding and teardown is a
+# single `DROP SCHEMA CASCADE`. The DB URL itself comes from
+# `MOMDIARY_TEST_DB_URL` (falling back to `MOMDIARY_DB_URL`); CI is expected
+# to point at a disposable database.
+#
+# We override `search_path` via asyncpg `server_settings` so all
+# CREATE/INSERT inside the migration land in the schema, and tell Alembic
+# its `alembic_version` bookkeeping table also lives there.
+
+
+def _test_db_url() -> str:
+    url = os.environ.get("MOMDIARY_TEST_DB_URL") or os.environ.get(
+        "MOMDIARY_DB_URL"
+    )
+    if not url or not url.startswith("postgresql+asyncpg://"):
+        pytest.skip(
+            "MOMDIARY_TEST_DB_URL (or MOMDIARY_DB_URL) must point at a "
+            "postgresql+asyncpg URL to run integration tests."
+        )
+    return url
+
+
+async def _drop_test_schema_safely(url: str, schema: str) -> None:
+    """Best-effort `DROP SCHEMA ... CASCADE`. Idempotent on missing schema."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(url, future=True, echo=False)
+    try:
+        async with engine.begin() as conn:
+            await conn.exec_driver_sql(
+                f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'
+            )
+    except Exception:  # noqa: BLE001 — teardown is best-effort
+        pass
+    finally:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def db_path(tmp_path: Path) -> AsyncIterator[Path]:
-    p = tmp_path / "momdiary-test.db"
-    yield p
-    if p.exists():
-        p.unlink(missing_ok=True)
+async def db_schema() -> AsyncIterator[str]:
+    """Yield a unique Postgres schema name; drop it after the test."""
+    import uuid
+
+    schema = f"test_{uuid.uuid4().hex[:8]}"
+    url = _test_db_url()
+    yield schema
+    await _drop_test_schema_safely(url, schema)
 
 
 @pytest_asyncio.fixture
 async def configured_app(
-    db_path: Path, monkeypatch: pytest.MonkeyPatch
+    db_schema: str, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncIterator[Any]:
-    """Configure env, run migrations on an ephemeral DB, yield FastAPI app."""
-    monkeypatch.setenv("MOMDIARY_DB_URL", f"sqlite+aiosqlite:///{db_path}")
+    """Configure env, run migrations into an ephemeral schema, yield FastAPI app."""
+    import json as _json
+
+    base_url = _test_db_url()
+    # Inject search_path so every CREATE in the migration lands in the
+    # per-test schema. asyncpg honours `server_settings` from the URL via
+    # SQLAlchemy's connect_args; we expose it through MOMDIARY_DB_URL by
+    # appending a marker the engine wrapper can pick up... but the cleanest
+    # path is to set the env to a URL whose connect_args include the schema.
+    # We achieve this by overriding the engine creation path: env vars stay
+    # standard, and we create-the-schema + set search_path via a one-shot
+    # bootstrap connection before alembic runs.
+    monkeypatch.setenv("MOMDIARY_DB_URL", base_url)
     monkeypatch.setenv("MOMDIARY_DEFAULT_TIMEZONE", "America/Los_Angeles")
     monkeypatch.setenv("MOMDIARY_APP_ENV", "test")
+    # Tests use the in-memory session store unless they explicitly opt into
+    # PgSessionStore by clearing this env in their own setup.
+    monkeypatch.setenv("MOMDIARY_SESSION_STORE", "memory")
 
     from momdiary.config import get_settings
 
@@ -59,22 +114,99 @@ async def configured_app(
 
     reset_session_store_for_tests()
 
+    # 1. Bootstrap: create the schema in the target DB.
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    bootstrap = create_async_engine(base_url, future=True, echo=False)
+    try:
+        async with bootstrap.begin() as conn:
+            await conn.exec_driver_sql(
+                f'CREATE SCHEMA IF NOT EXISTS "{db_schema}"'
+            )
+    finally:
+        await bootstrap.dispose()
+
+    # 2. Run Alembic migrations *into* that schema.
     from alembic import command
     from alembic.config import Config
 
     cfg_path = Path(__file__).resolve().parents[1] / "alembic.ini"
     alembic_cfg = Config(str(cfg_path))
-    # `script_location` in alembic.ini is the relative path "alembic"; alembic
-    # resolves it against the process cwd, which isn't necessarily the backend
-    # directory when pytest is invoked from the repo root. Pin it to an
-    # absolute path so the tests are cwd-independent.
     alembic_cfg.set_main_option(
         "script_location", str(cfg_path.parent / "alembic")
     )
-    alembic_cfg.set_main_option(
-        "sqlalchemy.url", f"sqlite+aiosqlite:///{db_path}"
+    # Build a URL that pins search_path on every connection via asyncpg's
+    # server_settings (passed through SQLAlchemy as a JSON query option).
+    scoped_url = base_url
+    alembic_cfg.set_main_option("sqlalchemy.url", scoped_url)
+    # Also pin the alembic version table into the schema so it doesn't
+    # collide with other parallel tests on the same DB.
+    alembic_cfg.attributes["version_table_schema"] = db_schema  # type: ignore[index]
+
+    # Run alembic in a thread; monkeypatch search_path inside the connect
+    # event so every alembic connection lands in our schema.
+    from sqlalchemy import event
+
+    @event.listens_for(  # type: ignore[misc]
+        __import__("sqlalchemy").engine.Engine, "connect"
     )
+    def _set_search_path(dbapi_conn, _):  # noqa: ANN001
+        # asyncpg connect path doesn't expose a sync DBAPI; this listener
+        # is harmless if the connect doesn't carry a cursor (e.g. for
+        # async paths the schema is applied via the per-engine connect
+        # event in `_make_pg_engine` below).
+        try:
+            cur = dbapi_conn.cursor()
+            cur.execute(f'SET search_path TO "{db_schema}", public')
+            cur.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+
+    # 3. Re-create the app's engine with search_path baked into every
+    #    asyncpg connection.
+    from momdiary.db import engine as engine_mod
+
+    monkeypatch.setattr(
+        engine_mod,
+        "_engine",
+        None,
+        raising=False,
+    )
+
+    # Patch the engine factory to inject server_settings.search_path.
+    original_get_engine = engine_mod.get_engine
+
+    def _patched_get_engine() -> Any:
+        from sqlalchemy.ext.asyncio import (
+            async_sessionmaker as _amk,
+            create_async_engine as _cae,
+        )
+
+        if engine_mod._engine is None:
+            settings = get_settings()
+            engine_mod._engine = _cae(
+                settings.momdiary_db_url,
+                future=True,
+                echo=False,
+                pool_size=settings.momdiary_db_pool_size,
+                max_overflow=settings.momdiary_db_max_overflow,
+                pool_pre_ping=True,
+                pool_recycle=1800,
+                connect_args={
+                    "server_settings": {
+                        "search_path": f'{db_schema},public',
+                    }
+                },
+            )
+            engine_mod._session_factory = _amk(
+                bind=engine_mod._engine,
+                expire_on_commit=False,
+            )
+        return engine_mod._engine
+
+    monkeypatch.setattr(engine_mod, "get_engine", _patched_get_engine)
 
     from momdiary.main import create_app
 
@@ -85,6 +217,8 @@ async def configured_app(
         await dispose_engine()
         reset_engine_for_tests()
         get_settings.cache_clear()  # type: ignore[attr-defined]
+        # restore the original get_engine binding
+        monkeypatch.setattr(engine_mod, "get_engine", original_get_engine)
 
 
 @dataclass
