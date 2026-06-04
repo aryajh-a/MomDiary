@@ -12,9 +12,10 @@ from momdiary.models.orm import Poop
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
+    get_request_timezone,
     parse_iso_with_offset,
     to_iso,
+    to_utc_iso,
 )
 
 logger = get_logger(__name__)
@@ -42,6 +43,7 @@ class PoopsRepository:
 
     async def create(self, *, occurred_at: str, consistency: str) -> Poop:
         _validate(occurred_at, consistency)
+        occurred_at = to_utc_iso(occurred_at)
         row = Poop(
             baby_id=require_active_baby_id(),
             occurred_at=occurred_at,
@@ -68,7 +70,7 @@ class PoopsRepository:
         return row
 
     async def list_by_date(self, d: date) -> list[Poop]:
-        tz = await get_default_timezone(self._session)
+        tz = await get_request_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(
@@ -98,6 +100,7 @@ class PoopsRepository:
         new_occ = occurred_at if occurred_at is not None else row.occurred_at
         new_con = consistency if consistency is not None else row.consistency
         _validate(new_occ, new_con)
+        new_occ = to_utc_iso(new_occ)
         if new_occ == row.occurred_at and new_con == row.consistency:
             logger.info("poops.update.unchanged", entry_id=entry_id)
             return row, True

@@ -30,7 +30,7 @@ from momdiary.agents.tools.registry import (
     invoke_tool,
 )
 from momdiary.observability.logging import get_logger
-from momdiary.services.time_service import get_default_timezone
+from momdiary.services.time_service import get_request_timezone
 
 logger = get_logger(__name__)
 
@@ -240,7 +240,7 @@ def _build_tool_wrappers(
 async def _format_context(
     session: AsyncSession, entry_id: int | None, entry_type: str | None
 ) -> str:
-    tz = await get_default_timezone(session)
+    tz = await get_request_timezone(session)
     now_local = datetime.now(tz)
     lines = [
         f"Current local time: {now_local.isoformat(timespec='seconds')} ({tz.key}).",

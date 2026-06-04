@@ -1,6 +1,6 @@
 ﻿# MomDiary Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-06-02
+Auto-generated from all feature plans. Last updated: 2026-06-05
 
 ## Active Technologies
 - Python 3.12 + FastAPI, Microsoft Agent Framework (`agent-framework`, `agent-framework-azure-ai`, prerelease per constitution), `azure-identity`, SQLAlchemy 2.x (async) + `aiosqlite`, Alembic, Pydantic v2, `structlog` (or `python-json-logger`) (001-setup-environment)
@@ -17,6 +17,8 @@ Auto-generated from all feature plans. Last updated: 2026-06-02
 - SQLite (`backend/momdiary.db`) via `sqlite+aiosqlite`. One new Alembic revision (`2026XXXX_008_clerk_users.py`). (008-clerk-auth)
 - Python 3.12 (backend) + FastAPI, SQLAlchemy 2.x async, Alembic, **asyncpg>=0.29** (replaces aiosqlite for runtime), Pydantic v2, `structlog` (009-postgres-migration)
 - Azure Database for PostgreSQL Flexible Server (`legion.postgres.database.azure.com`) hosting both relational tables and `chat_sessions` JSONB; new Alembic baseline `0004_postgres_baseline.py`; legacy SQLite revisions retained as history only (009-postgres-migration)
+- Python 3.12 (backend, unchanged); TypeScript 5.4 (frontend, unchanged for this feature) + FastAPI; `agent-framework-core==1.0.0rc6`; `agent-framework-azure-ai==1.0.0rc6` (Principle V — MAF-first, prerelease channel); `azure-identity`; `azure-ai-projects` (new — for `WebSearchTool` model + Foundry chat client surface); SQLAlchemy 2.x async; Pydantic v2; `structlog` (011-research-web-context)
+- Azure Database for PostgreSQL Flexible Server (single datastore per feature 009). No new tables, no Alembic migration. Research turns reuse the existing `chat_sessions` JSONB row with an extended `ChatTurn` carrying an optional `sources: list[{title,url}]` field. (011-research-web-context)
 
 ## Project Structure
 
@@ -35,9 +37,9 @@ cd src; pytest; ruff check .
 Python 3.12: Follow project lint/format gates (ruff, black-compatible). TypeScript 5.4: project ESLint + Prettier.
 
 ## Recent Changes
+- 011-research-web-context: Added Python 3.12 (backend, unchanged); TypeScript 5.4 (frontend, unchanged for this feature) + FastAPI; `agent-framework-core==1.0.0rc6`; `agent-framework-azure-ai==1.0.0rc6` (Principle V — MAF-first, prerelease channel); `azure-identity`; `azure-ai-projects` (new — for `WebSearchTool` model + Foundry chat client surface); SQLAlchemy 2.x async; Pydantic v2; `structlog`
 - 009-postgres-migration: Switched backend storage from SQLite (aiosqlite) to Azure Postgres Flex via asyncpg; chat sessions now persist in a `chat_sessions` JSONB table with a background TTL sweeper (`pg_try_advisory_lock`).
 - 008-clerk-auth: Added Python 3.12 (backend, unchanged), TypeScript 5.4 (frontend, unchanged).
-- 007-profile-management: Added Python 3.12 (backend, unchanged surface area); TypeScript 5.4 (frontend)
 
 
 <!-- MANUAL ADDITIONS START -->
