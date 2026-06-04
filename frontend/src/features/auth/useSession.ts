@@ -5,8 +5,9 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { apiClient, ApiError, onUnauthorized, setActiveBabyId } from "@/shared/apiClient";
+import { detectBrowserTimezone } from "@/shared/time";
 import type { CurrentUser, UserPublic, UserUpdate } from "@/shared/types";
 
 /**
@@ -71,11 +72,42 @@ export function useUpdateProfileMutation() {
             display_name: data.user.display_name,
             email: data.user.email,
             active_baby_id: data.user.active_baby_id,
+            timezone: data.user.timezone,
           },
         };
       });
     },
   });
+}
+
+/**
+ * `useTimezoneSync()` — feature 009. Once the local user is loaded, capture the
+ * browser's IANA timezone to the backend (`PATCH /v1/users/me`) whenever it
+ * differs from the stored value. Runs at most once per mount; re-enables on
+ * failure so a transient error can retry. Safe to call with `undefined` (the
+ * effect no-ops until the user resolves).
+ */
+export function useTimezoneSync(user: CurrentUser | undefined): void {
+  const qc = useQueryClient();
+  const attempted = useRef(false);
+  useEffect(() => {
+    if (!user || attempted.current) return;
+    const browserTz = detectBrowserTimezone();
+    if (!browserTz || browserTz === user.timezone) return;
+    attempted.current = true;
+    void apiClient
+      .updateMe({ timezone: browserTz })
+      .then((res) => {
+        qc.setQueryData<SessionPayload>(SESSION_QUERY_KEY, (prev) =>
+          prev
+            ? { user: { ...prev.user, timezone: res.user.timezone ?? browserTz } }
+            : prev,
+        );
+      })
+      .catch(() => {
+        attempted.current = false; // allow a retry on the next render/mount
+      });
+  }, [user, qc]);
 }
 
 /**

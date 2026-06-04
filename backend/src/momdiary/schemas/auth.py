@@ -20,6 +20,7 @@ class UserPublic(_StrictModel):
     display_name: str
     email_verified: bool = False
     active_baby_id: int | None = None
+    timezone: str | None = None
 
 
 class AuthSessionInfo(_StrictModel):
@@ -37,6 +38,7 @@ class CurrentUserOut(_StrictModel):
     email_verified: bool
     display_name: str
     active_baby_id: int | None = None
+    timezone: str | None = None
 
 
 class ErrorResponse(_StrictModel):

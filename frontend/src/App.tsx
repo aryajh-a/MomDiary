@@ -9,7 +9,7 @@ import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SignInPage } from "@/features/auth/SignInPage";
 import { SignUpPage } from "@/features/auth/SignUpPage";
 import { VerifyEmailBanner } from "@/features/auth/VerifyEmailBanner";
-import { useLogoutMutation, useSession } from "@/features/auth/useSession";
+import { useLogoutMutation, useSession, useTimezoneSync } from "@/features/auth/useSession";
 import { onUnauthorized } from "@/shared/apiClient";
 import { BabySwitcher } from "@/features/babies/BabySwitcher";
 import { FirstBabyPrompt } from "@/features/babies/FirstBabyPrompt";
@@ -148,6 +148,8 @@ function AppShell(props: {
  */
 function SignedInShell(): JSX.Element {
   const session = useSession();
+  // Feature 009: capture the browser's timezone once the user is loaded.
+  useTimezoneSync(session.data?.user);
 
   if (session.isLoading || (session.isPending && !session.data)) {
     return (

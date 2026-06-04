@@ -26,7 +26,7 @@ from momdiary.db.repositories.appointments import AppointmentsRepository
 from momdiary.db.repositories.feeds import FeedsRepository
 from momdiary.db.repositories.poops import PoopsRepository
 from momdiary.db.repositories.sleeps import SleepsRepository
-from momdiary.services.time_service import get_default_timezone
+from momdiary.services.time_service import get_request_timezone
 
 
 class ListByDateArgs(BaseModel):
@@ -37,7 +37,7 @@ class ListByDateArgs(BaseModel):
 
 async def _resolve_date(session: AsyncSession, raw: str | None) -> _date:
     if raw is None or raw.strip() == "":
-        tz = await get_default_timezone(session)
+        tz = await get_request_timezone(session)
         return datetime.now(tz).date()
     # Accept "YYYY-MM-DD" strictly; let ValueError bubble up so the wrapper
     # can surface a useful error message to the model.

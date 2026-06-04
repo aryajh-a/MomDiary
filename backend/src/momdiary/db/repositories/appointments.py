@@ -13,9 +13,10 @@ from momdiary.models.orm import Appointment, AppointmentNote
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
+    get_request_timezone,
     parse_iso_with_offset,
     to_iso,
+    to_utc_iso,
 )
 
 logger = get_logger(__name__)
@@ -50,6 +51,7 @@ class AppointmentsRepository:
         _validate(scheduled_at)
         if note is not None:
             _validate_note(note)
+        scheduled_at = to_utc_iso(scheduled_at)
         row = Appointment(
             baby_id=require_active_baby_id(),
             scheduled_at=scheduled_at,
@@ -93,7 +95,7 @@ class AppointmentsRepository:
         return row
 
     async def list_by_date(self, d: date) -> list[Appointment]:
-        tz = await get_default_timezone(self._session)
+        tz = await get_request_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(
@@ -119,6 +121,7 @@ class AppointmentsRepository:
             return None, False
         new_sched = scheduled_at if scheduled_at is not None else row.scheduled_at
         _validate(new_sched)
+        new_sched = to_utc_iso(new_sched)
         if new_sched == row.scheduled_at:
             logger.info("appointments.update.unchanged", entry_id=entry_id)
             return row, True

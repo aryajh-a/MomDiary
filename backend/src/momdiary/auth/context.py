@@ -14,9 +14,19 @@ agent-interactions logger to satisfy the new `baby_id NOT NULL` FK
 from __future__ import annotations
 
 from contextvars import ContextVar
+from zoneinfo import ZoneInfo
 
 _active_baby_id: ContextVar[int | None] = ContextVar(
     "momdiary_active_baby_id", default=None
+)
+
+# Feature 009 — per-request caregiver timezone. Set by
+# `auth.dependencies.get_current_user` (runs on every authenticated request),
+# read by `services.time_service.get_request_timezone` so repositories and the
+# agent resolve date windows in the caregiver's zone without threading it
+# through every signature. None ⇒ consumers fall back to the system default.
+_active_user_timezone: ContextVar[ZoneInfo | None] = ContextVar(
+    "momdiary_active_user_timezone", default=None
 )
 
 
@@ -26,6 +36,14 @@ def set_active_baby_id(baby_id: int | None) -> None:
 
 def get_active_baby_id() -> int | None:
     return _active_baby_id.get()
+
+
+def set_active_user_timezone(tz: ZoneInfo | None) -> None:
+    _active_user_timezone.set(tz)
+
+
+def get_active_user_timezone() -> ZoneInfo | None:
+    return _active_user_timezone.get()
 
 
 def require_active_baby_id() -> int:

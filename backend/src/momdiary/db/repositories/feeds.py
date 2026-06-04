@@ -12,9 +12,10 @@ from momdiary.models.orm import Feed
 from momdiary.observability.logging import get_logger
 from momdiary.services.time_service import (
     date_window_in_tz,
-    get_default_timezone,
+    get_request_timezone,
     parse_iso_with_offset,
     to_iso,
+    to_utc_iso,
 )
 
 logger = get_logger(__name__)
@@ -52,6 +53,7 @@ class FeedsRepository:
         self, *, feed_type: str, quantity: float, unit: str, occurred_at: str
     ) -> Feed:
         _validate(feed_type, quantity, unit, occurred_at)
+        occurred_at = to_utc_iso(occurred_at)
         row = Feed(
             baby_id=require_active_baby_id(),
             feed_type=feed_type,
@@ -86,7 +88,7 @@ class FeedsRepository:
         return row
 
     async def list_by_date(self, d: date) -> list[Feed]:
-        tz = await get_default_timezone(self._session)
+        tz = await get_request_timezone(self._session)
         start, end = date_window_in_tz(d, tz)
         baby_id = require_active_baby_id()
         result = await self._session.execute(
@@ -121,6 +123,7 @@ class FeedsRepository:
         new_unit = unit if unit is not None else row.unit
         new_occ = occurred_at if occurred_at is not None else row.occurred_at
         _validate(new_type, new_qty, new_unit, new_occ)
+        new_occ = to_utc_iso(new_occ)
         if (
             new_type == row.feed_type
             and new_qty == row.quantity
