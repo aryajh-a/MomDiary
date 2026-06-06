@@ -44,6 +44,7 @@ from momdiary.agents.brave_search import (
     BraveSearchClient,
     BraveSearchError,
 )
+from momdiary.agents.session_store import ChatTurn
 from momdiary.config import Settings, get_settings
 from momdiary.observability.logging import get_logger
 
@@ -97,10 +98,20 @@ class WebSearchPort(Protocol):
     Implementations must return a ``(synthesized_text, citations)`` tuple
     where each citation is a dict containing at minimum ``title`` and
     ``url``.
+
+    ``history`` is the recent caregiver+assistant transcript (oldest
+    first, excluding the current caregiver message) trimmed to the
+    configured prompt token budget. Adapters are free to ignore it, but
+    the production Brave adapter folds it into the user prompt so
+    follow-up questions retain context.
     """
 
     async def search(
-        self, query: str, *, age_label: str = ""
+        self,
+        query: str,
+        *,
+        age_label: str = "",
+        history: list[ChatTurn] = ...,
     ) -> tuple[str, list[dict[str, str]]]: ...
 
 
@@ -246,13 +257,22 @@ class BraveResearchAdapter:
     # -- WebSearchPort -----------------------------------------------------
 
     async def search(
-        self, query: str, *, age_label: str = ""
+        self,
+        query: str,
+        *,
+        age_label: str = "",
+        history: list[ChatTurn] | None = None,
     ) -> tuple[str, list[dict[str, str]]]:
         """Run one Brave-grounded research turn.
 
         ``age_label`` is folded into the prompt prefix so the model can
         scope guidance to the baby's age band when known
         (e.g. "4-month-old"). Empty string disables the prefix.
+
+        ``history`` is the recent transcript (oldest first, excluding
+        the current caregiver message). When non-empty it is rendered
+        as a short ``Previous conversation`` preamble so follow-up
+        questions ("and for newborns?") retain context.
         """
         chat_client = self._ensure_chat_client()
         brave = self._ensure_brave()
@@ -271,7 +291,21 @@ class BraveResearchAdapter:
         )
 
         prefix = f"For a {age_label}: " if age_label else ""
-        full_query = f"{prefix}{query}".strip()
+        transcript = _render_history(history or [])
+        full_query = f"{transcript}{prefix}{query}".strip()
+
+        # Print the exact prompt the agent will see. This is the single
+        # source of truth for "what did we send the LLM?" — useful when
+        # the model's answer surprises us. `prompt_length` and
+        # `history_turns` give a quick scan of how much context the model
+        # received without parsing the full text field.
+        logger.info(
+            "research.agent.prompt",
+            history_turns=len(history or []),
+            age_label=age_label,
+            prompt_length=len(full_query),
+            prompt=full_query,
+        )
 
         try:
             response = await agent.run(full_query)
@@ -297,6 +331,28 @@ class BraveResearchAdapter:
             citations.append(r.to_source())
 
         return (response.text or "", citations)
+
+
+def _render_history(history: list[ChatTurn]) -> str:
+    """Render prior turns as a short transcript preamble.
+
+    Keeps the format compact (one line per turn) so it fits the model
+    context cheaply and is easy for the LLM to follow. Empty history
+    returns an empty string so single-turn calls keep their original
+    prompt shape.
+    """
+    if not history:
+        return ""
+    lines: list[str] = ["Previous conversation:"]
+    for turn in history:
+        speaker = "Caregiver" if turn.role == "caregiver" else "Assistant"
+        text = (turn.text or "").strip().replace("\n", " ")
+        if not text:
+            continue
+        lines.append(f"{speaker}: {text}")
+    lines.append("")  # blank line before the current question
+    lines.append("Current question: ")
+    return "\n".join(lines)
 
 
 __all__ = [
