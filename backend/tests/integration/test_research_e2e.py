@@ -39,12 +39,16 @@ class _StubWebSearch:
         self._result = result
         self._raise = raise_exc
         self._delay = delay_seconds
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, int]] = []
 
     async def search(
-        self, query: str, *, age_label: str = ""
+        self,
+        query: str,
+        *,
+        age_label: str = "",
+        history: list[Any] | None = None,
     ) -> tuple[str, list[dict[str, str]]]:
-        self.calls.append((query, age_label))
+        self.calls.append((query, age_label, len(history or [])))
         if self._delay > 0:
             await asyncio.sleep(self._delay)
         if self._raise is not None:

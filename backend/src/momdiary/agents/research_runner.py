@@ -85,6 +85,7 @@ class ResearchRunner:
         timeout_seconds: int,
         min_sources: int,
         max_sources: int,
+        history_token_budget: int = 12_000,
     ) -> None:
         if max_sources < min_sources:
             raise ValueError(
@@ -92,11 +93,14 @@ class ResearchRunner:
             )
         if timeout_seconds < 0:
             raise ValueError("timeout_seconds must be >= 0")
+        if history_token_budget < 0:
+            raise ValueError("history_token_budget must be >= 0")
         self._web_search = web_search
         self._store = session_store
         self._timeout_seconds = timeout_seconds
         self._min_sources = min_sources
         self._max_sources = max_sources
+        self._history_token_budget = history_token_budget
 
     async def run(
         self,
@@ -121,6 +125,37 @@ class ResearchRunner:
         # Serialize the multi-step turn under the per-session lock so
         # concurrent calls for the same session see a consistent history.
         async with session.lock:
+            # Snapshot the prior transcript BEFORE appending the new
+            # caregiver turn so the model sees "previous conversation +
+            # current question" rather than echoing its own input back.
+            history = await self._store.recent_view(
+                session, token_budget=self._history_token_budget
+            )
+
+            # Debug visibility: emit one log line summarising the history
+            # snapshot, then one line per turn so the entire transcript
+            # the agent will see is reconstructable from logs alone.
+            logger.info(
+                "research.runner.history_snapshot",
+                correlation_id=cid,
+                session_id=session.id[:8],
+                user_id=user_id,
+                baby_id=baby_id,
+                turn_count=len(history),
+                history_token_budget=self._history_token_budget,
+                current_message=message,
+            )
+            for idx, turn in enumerate(history):
+                logger.info(
+                    "research.runner.history_turn",
+                    correlation_id=cid,
+                    session_id=session.id[:8],
+                    index=idx,
+                    role=turn.role,
+                    outcome=turn.outcome,
+                    text=turn.text,
+                )
+
             await self._store.append(
                 session,
                 ChatTurn(
@@ -138,7 +173,10 @@ class ResearchRunner:
                 sources_before_filter,
                 web_search_succeeded,
             ) = await self._invoke_web_search(
-                message, age_phrase=baby_age_phrase, correlation_id=cid
+                message,
+                age_phrase=baby_age_phrase,
+                correlation_id=cid,
+                history=history,
             )
 
             await self._store.append(
@@ -188,6 +226,7 @@ class ResearchRunner:
         *,
         age_phrase: str,
         correlation_id: str,
+        history: list[ChatTurn],
     ) -> tuple[ResearchOutcome, str, list[dict[str, str]], int, bool]:
         """Wrap the port call with timeout + error mapping.
 
@@ -200,12 +239,16 @@ class ResearchRunner:
                 # coroutine doesn't return synchronously — useful for
                 # exercising the failure path in tests.
                 synthesized, raw_sources = await asyncio.wait_for(
-                    self._web_search.search(message, age_label=age_phrase),
+                    self._web_search.search(
+                        message, age_label=age_phrase, history=history
+                    ),
                     timeout=0,
                 )
             else:
                 synthesized, raw_sources = await asyncio.wait_for(
-                    self._web_search.search(message, age_label=age_phrase),
+                    self._web_search.search(
+                        message, age_label=age_phrase, history=history
+                    ),
                     timeout=self._timeout_seconds,
                 )
         except (TimeoutError, asyncio.TimeoutError):

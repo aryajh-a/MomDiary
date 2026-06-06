@@ -87,6 +87,7 @@ def get_research_runner(
         timeout_seconds=settings.momdiary_research_web_search_timeout_seconds,
         min_sources=settings.momdiary_research_min_sources,
         max_sources=settings.momdiary_research_max_sources,
+        history_token_budget=settings.momdiary_session_prompt_token_budget,
     )
 
 
