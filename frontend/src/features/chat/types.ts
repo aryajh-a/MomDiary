@@ -5,6 +5,11 @@ export interface ChatMessageError {
   message: string;
 }
 
+export interface ChatMessageSource {
+  title: string;
+  url: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -12,6 +17,12 @@ export interface ChatMessage {
   ts: number;
   correlation_id?: string;
   error?: ChatMessageError;
+  /**
+   * Citations attached to a research assistant turn. `undefined` for
+   * caregiver turns and for diary assistant turns; `[]` when the
+   * research call returned no usable sources.
+   */
+  sources?: ChatMessageSource[];
 }
 
 export interface ChatSession {

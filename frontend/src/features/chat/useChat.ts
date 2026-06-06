@@ -45,16 +45,13 @@ export function useChat() {
       try {
         if (mode === "research") {
           const response: ResearchResponse = await researchMutation.mutateAsync(draft);
-          const sourcesText = response.sources.length
-            ? "\n\nSources:\n" +
-              response.sources.map((s, i) => `${i + 1}. ${s.title} — ${s.url}`).join("\n")
-            : "";
           const assistantMessage: ChatMessage = {
             id: makeId(),
             role: "assistant",
-            text: response.agent_message + sourcesText,
+            text: response.agent_message,
             ts: Date.now(),
             correlation_id: response.correlation_id,
+            sources: response.sources,
           };
           dispatch({ type: "success", assistantMessage });
           return;

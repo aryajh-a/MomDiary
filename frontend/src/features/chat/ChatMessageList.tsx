@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { format } from "date-fns";
+import { AssistantMessageBody } from "./AssistantMessageBody";
 import type { ChatMessage } from "./types";
 
 interface Props {
@@ -35,12 +36,25 @@ export function ChatMessageList({ messages, inFlight }: Props): JSX.Element {
 }
 
 function AssistantRow({ message }: { message: ChatMessage }): JSX.Element {
+  const isResearch =
+    (message.sources !== undefined && message.sources.length > 0) ||
+    /This is general information, not medical advice/.test(message.text);
+  // Research replies get the structured renderer (paragraphs, lists,
+  // bold, sources, disclaimer). Diary replies stay on the simple
+  // single-paragraph path — they're already terse confirmations like
+  // "Logged 120 ml of breast milk." and don't benefit from formatting.
   return (
     <li className="flex items-end gap-2">
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-orange-100 ring-1 ring-orange-200">
         <SparkleIcon className="h-4 w-4 text-orange-600" />
       </span>
-      <div className="flex max-w-[78%] flex-col items-start">
+      <div
+        className={
+          isResearch
+            ? "flex max-w-[92%] flex-col items-start"
+            : "flex max-w-[78%] flex-col items-start"
+        }
+      >
         <div
           className={
             message.error
@@ -48,7 +62,11 @@ function AssistantRow({ message }: { message: ChatMessage }): JSX.Element {
               : "rounded-2xl rounded-bl-md bg-white px-3 py-2 text-slate-800 text-sm shadow-sm ring-1 ring-orange-100"
           }
         >
-          <p className="whitespace-pre-wrap leading-snug">{message.text}</p>
+          {isResearch && !message.error ? (
+            <AssistantMessageBody text={message.text} sources={message.sources} />
+          ) : (
+            <p className="whitespace-pre-wrap leading-snug">{message.text}</p>
+          )}
           {message.error ? (
             <p className="mt-1 text-red-700 text-xs">
               {message.error.code}: {message.error.message}
