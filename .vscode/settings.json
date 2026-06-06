@@ -26,7 +26,10 @@
             "matchCommandLine": true
         },
         "Set-Content": true,
-        "git checkout": true
+        "git checkout": true,
+        "D:\\Azure`": true,
+        ".\\.venv\\Scripts\\python.exe": true,
+        "npx vitest": true
     }
 }
 

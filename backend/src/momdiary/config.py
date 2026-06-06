@@ -81,6 +81,42 @@ class Settings(BaseSettings):
     # JWKS cache TTL (seconds); force-refresh also triggered on unknown `kid`.
     clerk_jwks_cache_ttl_seconds: int = Field(default=3_600)
 
+    # Feature 011 — Context-aware web research.
+    # Hard cap on the external web-search call (FR-014). On TimeoutError
+    # the runner short-circuits to outcome="research_unavailable" without
+    # raising 5xx.
+    momdiary_research_web_search_timeout_seconds: int = Field(default=15)
+    # FR-011a: response carries between 3 and 5 trusted citations after
+    # filtering; target is 4. If fewer than min remain post-filter, return
+    # whatever survives down to 1; if zero, return no_sources_found.
+    momdiary_research_max_sources: int = Field(default=5)
+    momdiary_research_min_sources: int = Field(default=3)
+    # Brave Search Web API (https://api-dashboard.search.brave.com/).
+    # The research agent registers a single `brave_web_search` MAF tool
+    # backed by this client; synthesis runs on the existing Azure OpenAI
+    # deployment configured above. Empty `api_key` → the adapter raises
+    # `ResearchUnavailableError` and the runner maps to
+    # `outcome="research_unavailable"` per FR-014.
+    momdiary_research_brave_api_key: str = Field(default="")
+    momdiary_research_brave_endpoint: str = Field(
+        default="https://api.search.brave.com/res/v1/web/search"
+    )
+    # Brave `safesearch` parameter — one of "off", "moderate", "strict".
+    # Default "strict" because the audience is parents researching infants.
+    momdiary_research_brave_safesearch: str = Field(default="strict")
+    # ISO-3166 country code used to bias Brave results.
+    momdiary_research_brave_country: str = Field(default="US")
+    # Raw result count requested from Brave before allow/block-list filtering
+    # (US4 Phase 6). Sized larger than `max_sources` so the post-filter has
+    # headroom to drop low-quality results without leaving too few citations.
+    momdiary_research_brave_count: int = Field(default=8)
+    # Optional override path for the trusted-domain allow-list (US4).
+    # Empty → use the built-in defaults shipped in `research_policy.py`.
+    momdiary_research_allow_list_path: str = Field(default="")
+    # Optional dedicated deployment for the scope/safety judge (US6).
+    # Empty → reuse `azure_openai_deployment`.
+    momdiary_research_guardrail_deployment: str = Field(default="")
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.momdiary_allowed_origins.split(",") if origin.strip()]

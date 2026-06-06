@@ -43,7 +43,20 @@ logger = get_logger(__name__)
 
 TurnRole = Literal["caregiver", "assistant"]
 TurnOutcome = Literal[
-    "created", "updated", "deleted", "clarification_requested", "rejected"
+    # Diary outcomes (features 001–004).
+    "created",
+    "updated",
+    "deleted",
+    "clarification_requested",
+    "rejected",
+    # Feature 011 — research outcomes. Persisted in the existing
+    # `chat_sessions.turns` JSONB column via the additive `sources`
+    # field below (contracts/session-store.md).
+    "research_answer",
+    "research_unavailable",
+    "scope_refused",
+    "safety_refused",
+    "no_sources_found",
 ]
 
 
@@ -58,6 +71,12 @@ class ChatTurn:
     outcome: TurnOutcome | None = None
     entry_type: str | None = None
     entry_id: int | None = None
+    # Feature 011 — list of `{title, url}` dicts for research assistant
+    # turns. `None` for caregiver turns and diary assistant turns; `[]`
+    # for refused/failed/no-source research turns (FR-013, FR-022). Read
+    # tolerantly by `pg_session_store._turn_from_json` so older JSONB
+    # rows that predate this field deserialize as `None`.
+    sources: list[dict[str, str]] | None = None
 
 
 @dataclass

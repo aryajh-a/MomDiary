@@ -276,16 +276,25 @@ export function ChatPanel({ onHide, voiceOnly = false }: ChatPanelProps = {}): J
 
   // Per-mode history isolation. The underlying chat store keeps a single
   // message stream (one session_id); we tag each message with the mode that
-  // was active when its turn started, then filter at render time. `Map` is
-  // stored in a ref because the tagging side-effect must not trigger re-renders.
+  // was active when its turn started, then filter at render time. The map
+  // is a ref because the tagging is a write-once side-effect that must
+  // not trigger re-renders.
   const messageModeRef = useRef<Map<string, ChatMode>>(new Map());
   // FIFO of modes for in-flight turns. `submitInMode` pushes the active mode
-  // before dispatching; the tagging effect peeks for the caregiver message
-  // and shifts when the assistant reply lands. This keeps a paired turn on
-  // the same mode even if the user switches mid-request.
+  // before dispatching `submit`; we shift one entry when the assistant reply
+  // lands. This keeps a paired turn on the same mode even if the user
+  // switches mid-request.
   const turnModeQueueRef = useRef<ChatMode[]>([]);
 
-  useEffect(() => {
+  // IMPORTANT: tagging must run during render (NOT in useEffect) so that
+  // the filtered list below sees the freshly-arrived assistant message in
+  // the SAME render that introduced it. If we deferred tagging to a
+  // useEffect, the first render after a research reply would filter the
+  // new assistant message out (its id wouldn't be in the map yet), and
+  // it would only become visible on the next state change — i.e. when
+  // the caregiver sends their next message. The `.has(id)` guard keeps
+  // the mutation idempotent under React's render re-invocation.
+  const { visibleMessages, inFlightHere } = useMemo(() => {
     for (const m of messages) {
       if (messageModeRef.current.has(m.id)) continue;
       if (m.role === "caregiver") {
@@ -296,20 +305,13 @@ export function ChatPanel({ onHide, voiceOnly = false }: ChatPanelProps = {}): J
         messageModeRef.current.set(m.id, next);
       }
     }
-  }, [messages, mode]);
-
-  const visibleMessages = useMemo(
-    () =>
-      messages.filter(
-        (m) => (messageModeRef.current.get(m.id) ?? "diary") === mode,
-      ),
-    [messages, mode],
-  );
-
-  // Show the typing indicator only when the in-flight turn belongs to the
-  // currently viewed mode.
-  const inFlightHere =
-    inFlight && (turnModeQueueRef.current[0] ?? mode) === mode;
+    const visible = messages.filter(
+      (m) => (messageModeRef.current.get(m.id) ?? "diary") === mode,
+    );
+    const typingHere =
+      inFlight && (turnModeQueueRef.current[0] ?? mode) === mode;
+    return { visibleMessages: visible, inFlightHere: typingHere };
+  }, [messages, mode, inFlight]);
 
   const submitInMode = useCallback(
     (text: string) => {
