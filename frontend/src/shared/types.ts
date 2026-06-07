@@ -309,12 +309,26 @@ export const setActiveBabyRequestSchema = z.object({
 });
 export type SetActiveBabyRequest = z.infer<typeof setActiveBabyRequestSchema>;
 
+// Feature 010 — baby profile attribute enums (mirror schemas/babies.py).
+export const genderSchema = z.enum(["girl", "boy", "other"]);
+export type Gender = z.infer<typeof genderSchema>;
+
 export const babySchema = z.object({
   id: z.number().int().positive(),
   owner_user_id: z.number().int().positive(),
   display_name: displayNameSchema,
   date_of_birth: dateOfBirth,
   color_tag: colorTagSchema.nullable(),
+  // Feature 010 — profile detail (all nullable until filled in).
+  gender: genderSchema.nullable(),
+  // Cached "current" snapshot = latest growth measurement.
+  weight_kg: z.number().positive().nullable(),
+  height_cm: z.number().positive().nullable(),
+  // Growth history projection: latest measurement date + change vs the
+  // previous measurement (null when there is no prior one to diff against).
+  last_measured_at: dateOfBirth.nullable(),
+  weight_kg_delta: z.number().nullable(),
+  height_cm_delta: z.number().nullable(),
   created_at: isoString,
   updated_at: isoString,
 });
@@ -336,5 +350,10 @@ export const babyUpdateSchema = z.object({
   display_name: displayNameSchema.optional(),
   date_of_birth: dateOfBirth.optional(),
   color_tag: colorTagSchema.optional(),
+  // Feature 010 — each optional field is clearable to null (sends explicit
+  // null to unset; omit to leave unchanged). Ranges mirror schemas/babies.py.
+  gender: genderSchema.nullable().optional(),
+  weight_kg: z.number().positive().max(50).nullable().optional(),
+  height_cm: z.number().positive().max(200).nullable().optional(),
 });
 export type BabyUpdate = z.infer<typeof babyUpdateSchema>;

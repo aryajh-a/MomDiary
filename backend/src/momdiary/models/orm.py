@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -85,6 +86,14 @@ class Baby(Base):
     display_name: Mapped[str] = mapped_column(String, nullable=False)
     date_of_birth: Mapped[str] = mapped_column(Text, nullable=False)  # ISO date
     color_tag: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Feature 010 — baby profile detail. All nullable; existing rows stay
+    # valid without backfill. Enum/range rules are enforced in the Pydantic
+    # request schemas (schemas/babies.py), not as DB CHECK constraints
+    # (see specs/010-baby-profile/data-model.md).
+    gender: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Current snapshot (kg / cm), stored in display units — no conversion.
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
     deleted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -259,6 +268,39 @@ class AgentInteraction(Base):
         Index("ix_agent_int_correlation", "correlation_id"),
         Index("ix_agent_int_created", "created_at"),
         Index("ix_agent_int_baby_created", "baby_id", "created_at"),
+    )
+
+
+class GrowthMeasurement(Base):
+    """A dated weight/height snapshot for a baby (feature 010 — growth history).
+
+    One row per measurement event (date + weight + height together). The
+    baby's `weight_kg` / `height_cm` columns cache the latest measurement for
+    cheap list reads; this table is the history of record and backs the
+    profile's delta ("↑0.3 kg" vs the previous measurement). Head circumference
+    is intentionally not modelled.
+    """
+
+    __tablename__ = "growth_measurements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    baby_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("babies.id", ondelete="RESTRICT"), nullable=False
+    )
+    weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    measured_at: Mapped[str] = mapped_column(Text, nullable=False)  # ISO date
+    deleted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default=_utcnow_iso)
+
+    __table_args__ = (
+        Index(
+            "ix_growth_baby_measured",
+            "baby_id",
+            "measured_at",
+            "deleted_at",
+        ),
     )
 
 

@@ -3,6 +3,7 @@ import { ApiError } from "@/shared/apiClient";
 import type { UserPublic } from "@/shared/types";
 import { useBabies, useCreateBabyMutation } from "../babies/useBabies";
 import { BabyCard } from "./BabyCard";
+import { BabyProfilePage } from "./BabyProfilePage";
 import { CaregiverCard } from "./CaregiverCard";
 
 const NAME_MAX = 80;
@@ -20,6 +21,24 @@ export function ProfilePage(props: {
   const babies = useBabies();
   const items = babies.data?.items ?? [];
   const [adding, setAdding] = useState(false);
+  const [selectedBabyId, setSelectedBabyId] = useState<number | null>(null);
+
+  // Open the dedicated per-baby profile. Read the baby straight from the
+  // already-loaded list cache by id so each screen shows only that baby's
+  // own data with no cross-baby bleed-through (FR-007).
+  const selectedBaby =
+    selectedBabyId == null
+      ? null
+      : (items.find((b) => b.id === selectedBabyId) ?? null);
+
+  if (selectedBaby) {
+    return (
+      <BabyProfilePage
+        baby={selectedBaby}
+        onBack={() => setSelectedBabyId(null)}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
@@ -85,7 +104,11 @@ export function ProfilePage(props: {
           <ul className="flex flex-col gap-3">
             {items.map((b) => (
               <li key={b.id}>
-                <BabyCard baby={b} isActive={b.id === user.active_baby_id} />
+                <BabyCard
+                  baby={b}
+                  isActive={b.id === user.active_baby_id}
+                  onOpen={() => setSelectedBabyId(b.id)}
+                />
               </li>
             ))}
           </ul>

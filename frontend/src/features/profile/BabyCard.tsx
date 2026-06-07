@@ -41,8 +41,9 @@ function ageFromDob(dobIso: string): string {
 export function BabyCard(props: {
   baby: Baby;
   isActive: boolean;
+  onOpen?: () => void;
 }): JSX.Element {
-  const { baby, isActive } = props;
+  const { baby, isActive, onOpen } = props;
   const update = useUpdateBabyMutation();
   const [editing, setEditing] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -99,21 +100,44 @@ export function BabyCard(props: {
       className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ${isActive ? "ring-amber-300" : "ring-slate-200"}`}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-base font-semibold text-slate-900">
-              {baby.display_name}
-            </h3>
-            {isActive ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                Active
-              </span>
-            ) : null}
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={`Open ${baby.display_name}'s profile`}
+            className="min-w-0 rounded text-left hover:opacity-80"
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-base font-semibold text-slate-900">
+                {baby.display_name}
+              </h3>
+              {isActive ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                  Active
+                </span>
+              ) : null}
+            </div>
+            <p className="text-xs text-slate-500">
+              DOB {baby.date_of_birth} · {ageFromDob(baby.date_of_birth)}
+            </p>
+          </button>
+        ) : (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-base font-semibold text-slate-900">
+                {baby.display_name}
+              </h3>
+              {isActive ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                  Active
+                </span>
+              ) : null}
+            </div>
+            <p className="text-xs text-slate-500">
+              DOB {baby.date_of_birth} · {ageFromDob(baby.date_of_birth)}
+            </p>
           </div>
-          <p className="text-xs text-slate-500">
-            DOB {baby.date_of_birth} · {ageFromDob(baby.date_of_birth)}
-          </p>
-        </div>
+        )}
         {!editing ? (
           <div className="flex shrink-0 items-center gap-2">
             <button
