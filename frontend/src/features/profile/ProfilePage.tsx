@@ -31,15 +31,6 @@ export function ProfilePage(props: {
       ? null
       : (items.find((b) => b.id === selectedBabyId) ?? null);
 
-  if (selectedBaby) {
-    return (
-      <BabyProfilePage
-        baby={selectedBaby}
-        onBack={() => setSelectedBabyId(null)}
-      />
-    );
-  }
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
       <header className="flex items-center justify-between">
@@ -116,6 +107,28 @@ export function ProfilePage(props: {
       </section>
 
       {adding ? <AddBabyDialog onClose={() => setAdding(false)} /> : null}
+
+      {/* Per-baby profile opens as a bottom sheet (mirrors the chat panel),
+          overlaying the list rather than replacing the whole screen. */}
+      {selectedBaby ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Baby profile"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 sm:items-center"
+          onClick={() => setSelectedBabyId(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md origin-bottom animate-[chatPop_180ms_ease-out]"
+          >
+            <BabyProfilePage
+              baby={selectedBaby}
+              onBack={() => setSelectedBabyId(null)}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

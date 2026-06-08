@@ -3,6 +3,7 @@ import { ApiError } from "@/shared/apiClient";
 import type { Baby, Gender } from "@/shared/types";
 import { genderSchema } from "@/shared/types";
 import { useUpdateBabyMutation } from "../babies/useBabies";
+import { RemoveBabyDialog } from "./RemoveBabyDialog";
 import {
   deltaDisplay,
   formatAge,
@@ -44,9 +45,13 @@ export function BabyProfilePage(props: {
 }): JSX.Element {
   const { baby, onBack } = props;
   const [editing, setEditing] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
+    <section
+      aria-label="Baby profile"
+      className="mx-auto flex h-[34rem] max-h-[85vh] w-full max-w-md flex-col gap-5 overflow-y-auto rounded-t-3xl bg-amber-50 px-4 pt-6 pb-6 text-slate-900 shadow-2xl ring-1 ring-slate-200 sm:rounded-2xl"
+    >
       <header className="flex items-center justify-between">
         <button
           type="button"
@@ -68,16 +73,32 @@ export function BabyProfilePage(props: {
         <>
           <ViewDetails baby={baby} />
           <GrowthCard baby={baby} />
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
-          >
-            Edit profile
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
+            >
+              Edit profile
+            </button>
+            <button
+              type="button"
+              onClick={() => setRemoveOpen(true)}
+              className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100"
+            >
+              Remove
+            </button>
+          </div>
         </>
       )}
-    </main>
+
+      {/* Removal opens an explicit confirmation. On success the babies list
+          invalidates, this baby drops out of the cache, and the profile sheet
+          unmounts on its own (see ProfilePage). */}
+      {removeOpen ? (
+        <RemoveBabyDialog baby={baby} onClose={() => setRemoveOpen(false)} />
+      ) : null}
+    </section>
   );
 }
 

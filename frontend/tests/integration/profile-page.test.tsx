@@ -149,12 +149,16 @@ describe("ProfilePage — US3 edit baby", () => {
 
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage user={USER} onBack={() => {}} />);
+    // Editing now lives inside the baby profile sheet — open it first.
     const card = await screen.findByLabelText("Baby Liam");
-    await user.click(within(card).getByRole("button", { name: /edit/i }));
-    const name = within(card).getByDisplayValue("Liam");
+    await user.click(within(card).getByRole("button", { name: /open liam's profile/i }));
+    await user.click(screen.getByRole("button", { name: /edit profile/i }));
+
+    const form = screen.getByRole("form", { name: /edit baby profile/i });
+    const name = within(form).getByDisplayValue("Liam");
     await user.clear(name);
     await user.type(name, "Liam Jr");
-    await user.click(within(card).getByRole("button", { name: /save/i }));
+    await user.click(within(form).getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(patched).toMatchObject({ display_name: "Liam Jr", date_of_birth: "2024-03-01" }));
   });
@@ -164,15 +168,17 @@ describe("ProfilePage — US3 edit baby", () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage user={USER} onBack={() => {}} />);
     const card = await screen.findByLabelText("Baby Liam");
-    await user.click(within(card).getByRole("button", { name: /edit/i }));
+    await user.click(within(card).getByRole("button", { name: /open liam's profile/i }));
+    await user.click(screen.getByRole("button", { name: /edit profile/i }));
 
-    const dob = within(card).getByDisplayValue("2024-03-01");
+    const form = screen.getByRole("form", { name: /edit baby profile/i });
+    const dob = within(form).getByDisplayValue("2024-03-01");
     // jsdom may not respect <input type="date" max>; assert via the input value
     // we set and the resulting error path.
     await user.clear(dob);
     await user.type(dob, "2999-01-01");
-    await user.click(within(card).getByRole("button", { name: /save/i }));
-    expect(await within(card).findByRole("alert")).toHaveTextContent(/future/i);
+    await user.click(within(form).getByRole("button", { name: /save/i }));
+    expect(await within(form).findByRole("alert")).toHaveTextContent(/future/i);
   });
 });
 
@@ -202,17 +208,20 @@ describe("ProfilePage — US4 remove baby", () => {
 
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage user={USER} onBack={() => {}} />);
+    // Removal now lives inside the baby profile sheet — open it first.
     const card = await screen.findByLabelText("Baby Liam");
-    await user.click(within(card).getByRole("button", { name: /remove/i }));
+    await user.click(within(card).getByRole("button", { name: /open liam's profile/i }));
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
 
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/remove liam/i)).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /remove liam/i });
     expect(within(dialog).getByText(/hide.*feeds.*sleeps/i)).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: /^remove$/i }));
 
     await waitFor(() => expect(deleted).toBe(10));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /remove liam/i })).not.toBeInTheDocument(),
+    );
   });
 
   it("Cancel closes the dialog without deleting", async () => {
@@ -228,10 +237,13 @@ describe("ProfilePage — US4 remove baby", () => {
     const user = userEvent.setup();
     renderWithProviders(<ProfilePage user={USER} onBack={() => {}} />);
     const card = await screen.findByLabelText("Baby Liam");
-    await user.click(within(card).getByRole("button", { name: /remove/i }));
-    const dialog = await screen.findByRole("dialog");
+    await user.click(within(card).getByRole("button", { name: /open liam's profile/i }));
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
+    const dialog = await screen.findByRole("dialog", { name: /remove liam/i });
     await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /remove liam/i })).not.toBeInTheDocument(),
+    );
     expect(calls).toBe(0);
   });
 });
