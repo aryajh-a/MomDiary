@@ -2,24 +2,49 @@ import { useState } from "react";
 import { ApiError } from "@/shared/apiClient";
 import { useCreateBabyMutation } from "./useBabies";
 
+function todayIsoDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Shown after sign-in when the user has no active baby (FR-009 / US2). */
 export function FirstBabyPrompt(): JSX.Element {
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
   const [colorTag, setColorTag] = useState("");
+  const [clientError, setClientError] = useState<string | null>(null);
   const create = useCreateBabyMutation();
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (create.isPending) return;
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      setClientError("Please enter your baby's name.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      setClientError("Please enter a valid date of birth.");
+      return;
+    }
+    if (dob > todayIsoDate()) {
+      setClientError("Date of birth can't be in the future.");
+      return;
+    }
+    setClientError(null);
     create.mutate({
-      display_name: name.trim(),
+      display_name: trimmed,
       date_of_birth: dob,
       ...(colorTag.trim() ? { color_tag: colorTag.trim() } : {}),
     });
   };
 
-  const errMsg = create.error instanceof ApiError ? create.error.message : null;
+  const serverError =
+    create.error instanceof ApiError ? create.error.message : null;
+  const errMsg = clientError ?? serverError;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 p-6">
@@ -43,6 +68,7 @@ export function FirstBabyPrompt(): JSX.Element {
           <input
             type="date"
             required
+            max={todayIsoDate()}
             value={dob}
             onChange={(e) => setDob(e.target.value)}
             className="rounded border border-slate-300 px-2 py-1.5"
