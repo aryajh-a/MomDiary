@@ -15,7 +15,7 @@ const NAME_MAX = 80;
  */
 export function ProfilePage(props: {
   user: UserPublic;
-  onBack: () => void;
+  onBack?: () => void;
 }): JSX.Element {
   const { user, onBack } = props;
   const babies = useBabies();
@@ -34,14 +34,18 @@ export function ProfilePage(props: {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
       <header className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
-          aria-label="Back to home"
-        >
-          ← Back
-        </button>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
+            aria-label="Back to home"
+          >
+            ← Back
+          </button>
+        ) : (
+          <span aria-hidden="true" className="w-[68px]" />
+        )}
         <h1 className="text-2xl font-bold text-slate-900">Profile</h1>
         <span aria-hidden="true" className="w-[68px]" />
       </header>
@@ -82,7 +86,7 @@ export function ProfilePage(props: {
           </p>
         ) : items.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-200">
-            <p className="text-sm text-slate-600">No babies yet.</p>
+            <p className="text-sm text-slate-600">No baby added yet</p>
             <button
               type="button"
               onClick={() => setAdding(true)}

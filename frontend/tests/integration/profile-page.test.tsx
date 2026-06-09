@@ -74,7 +74,7 @@ describe("ProfilePage — US1 view", () => {
     renderWithProviders(
       <ProfilePage user={{ ...USER, active_baby_id: null as unknown as number }} onBack={() => {}} />,
     );
-    expect(await screen.findByText(/no babies yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no baby added yet/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add a baby/i })).toBeInTheDocument();
   });
 });
