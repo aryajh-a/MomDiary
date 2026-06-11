@@ -7,7 +7,7 @@ import {
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SignInPage } from "@/features/auth/SignInPage";
-import { SignUpPage } from "@/features/auth/SignUpPage";
+import { SignUpPage } from "@/features/auth/SignupPage";
 import { VerifyEmailBanner } from "@/features/auth/VerifyEmailBanner";
 import { useLogoutMutation, useSession, useTimezoneSync } from "@/features/auth/useSession";
 import { onUnauthorized } from "@/shared/apiClient";

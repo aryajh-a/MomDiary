@@ -206,10 +206,10 @@ class AgentBundle:
 
 
 def _build_chat_client() -> Any:
-    """Construct an AzureOpenAIChatClient using DefaultAzureCredential.
+    """Construct an AzureOpenAIChatClient.
 
-    Per Principle IV, the backend authenticates to Azure OpenAI / Foundry
-    exclusively via Microsoft Entra ID. No API-key code path is supported.
+    When ``azure_openai_key`` is configured, authenticate with that API key;
+    otherwise fall back to Microsoft Entra ID via DefaultAzureCredential.
     """
     if AzureOpenAIChatClient is None:
         raise RuntimeError(
@@ -217,18 +217,26 @@ def _build_chat_client() -> Any:
             "Run `pip install --pre agent-framework agent-framework-azure-ai`."
         )
     settings = get_settings()
-    credential = DefaultAzureCredential()
+    auth_mode = "api_key" if settings.azure_openai_key else "entra_id"
     logger.info(
         "diary_agent.chat_client.building",
         endpoint=settings.azure_openai_endpoint,
         deployment=settings.azure_openai_deployment,
         api_version=settings.azure_openai_api_version,
+        auth_mode=auth_mode,
     )
+    if settings.azure_openai_key:
+        return AzureOpenAIChatClient(
+            endpoint=settings.azure_openai_endpoint,
+            deployment_name=settings.azure_openai_deployment,
+            api_version=settings.azure_openai_api_version,
+            api_key=settings.azure_openai_key,
+        )
     return AzureOpenAIChatClient(
         endpoint=settings.azure_openai_endpoint,
         deployment_name=settings.azure_openai_deployment,
         api_version=settings.azure_openai_api_version,
-        credential=credential,
+        credential=DefaultAzureCredential(),
     )
 
 

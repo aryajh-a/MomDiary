@@ -52,6 +52,36 @@ function getSRCtor(): SRConstructor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/**
+ * Merge a speech fragment into the running transcript without duplicating.
+ *
+ * Desktop Chrome refines a single result interim→final, so concatenating the
+ * results list works. Mobile (Android Chrome) instead emits *cumulative
+ * snapshots* of the same utterance as separate results — `["log", "log a",
+ * "log a feed at 1 am"]` — and repeats them, so plain concatenation produced
+ * `log log a log a feed at 1 am`. This keeps the longer of two overlapping
+ * fragments and only appends genuinely new tail text.
+ */
+function mergeFragment(prev: string, next: string): string {
+  const a = prev.trim();
+  const b = next.trim();
+  if (!b) return a;
+  if (!a) return b;
+  // One fragment is a snapshot/extension of the other → keep the longer.
+  if (b.startsWith(a)) return b;
+  if (a.startsWith(b) || a.endsWith(b)) return a;
+  // Partial overlap at the seam (a ends with the start of b) → stitch once.
+  const aLow = a.toLowerCase();
+  const bLow = b.toLowerCase();
+  for (let k = Math.min(a.length, b.length); k > 0; k--) {
+    if (aLow.slice(a.length - k) === bLow.slice(0, k)) {
+      return a + b.slice(k);
+    }
+  }
+  // Genuinely new segment → append with a separating space.
+  return `${a} ${b}`;
+}
+
 interface UseSpeechRecognitionOptions {
   onTranscript: (text: string, isFinal: boolean) => void;
   onFinal?: (text: string) => void;
@@ -80,8 +110,12 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
 
   // Cross-restart session state. `start()` resets these; `onend` auto-restart
   // preserves them so the running transcript survives a browser-induced gap.
+  // `finalAccumRef` = finalised text carried over from *prior* recognizer
+  // sessions (each browser auto-restart spins up a fresh recognizer whose
+  // `results` start over at index 0). `sessionFinalRef` = the current
+  // recognizer's finalised text, rebuilt from scratch on every `onresult`.
   const finalAccumRef = useRef("");
-  const lastInterimRef = useRef("");
+  const sessionFinalRef = useRef("");
   const silenceTimerRef = useRef<number | null>(null);
   const manualStopRef = useRef(false);
   const committedRef = useRef(false);
@@ -102,7 +136,10 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     clearSilence();
     committedRef.current = true;
     manualStopRef.current = true;
-    const text = (finalAccumRef.current + lastInterimRef.current).trim();
+    const text = mergeFragment(
+      finalAccumRef.current,
+      sessionFinalRef.current,
+    ).trim();
     const rec = recRef.current;
     if (rec) {
       try {
@@ -148,16 +185,21 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     rec.continuous = true;
 
     rec.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      // Rebuild this recognizer's transcript by MERGING every fragment in the
+      // list rather than concatenating. Android Chrome emits cumulative
+      // snapshots of one utterance as separate results (and repeats them), so
+      // `+=` produced "log a log a feed". `mergeFragment` keeps the longer of
+      // overlapping fragments and only appends genuinely new tail text. We
+      // treat interim and final fragments alike — the consumer overwrites the
+      // draft each event, so the distinction doesn't matter here.
+      let sessionText = "";
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
         if (!r) continue;
-        const t = r[0]?.transcript ?? "";
-        if (r.isFinal) finalAccumRef.current += t;
-        else interim += t;
+        sessionText = mergeFragment(sessionText, r[0]?.transcript ?? "");
       }
-      lastInterimRef.current = interim;
-      const combined = (finalAccumRef.current + interim).trim();
+      sessionFinalRef.current = sessionText;
+      const combined = mergeFragment(finalAccumRef.current, sessionText).trim();
       if (combined) onTranscriptRef.current(combined, false);
       // Any speech activity resets the silence countdown.
       clearSilence();
@@ -176,8 +218,15 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
       recRef.current = null;
       if (!manualStopRef.current && !committedRef.current) {
         // Browser auto-ended mid-session (Chrome does this even with
-        // continuous=true after a few seconds of silence). Resume so the
-        // user's pause doesn't terminate dictation.
+        // continuous=true after a few seconds of silence). Fold this session's
+        // text into the carry-over base before the fresh recognizer starts
+        // over at result index 0, then resume so the user's pause doesn't
+        // terminate dictation.
+        finalAccumRef.current = mergeFragment(
+          finalAccumRef.current,
+          sessionFinalRef.current,
+        );
+        sessionFinalRef.current = "";
         try {
           createAndStartRef.current();
           return;
@@ -189,7 +238,10 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
       setListening(false);
       if (!committedRef.current) {
         committedRef.current = true;
-        const text = (finalAccumRef.current + lastInterimRef.current).trim();
+        const text = mergeFragment(
+          finalAccumRef.current,
+          sessionFinalRef.current,
+        ).trim();
         if (text && onFinalRef.current) onFinalRef.current(text);
       }
     };
@@ -213,7 +265,7 @@ function useSpeechRecognition(opts: UseSpeechRecognitionOptions) {
     if (!Ctor) return;
     // Fresh session — wipe accumulated transcript and flags.
     finalAccumRef.current = "";
-    lastInterimRef.current = "";
+    sessionFinalRef.current = "";
     manualStopRef.current = false;
     committedRef.current = false;
     clearSilence();
