@@ -217,19 +217,28 @@ def _build_chat_client() -> Any:
             "Run `pip install --pre agent-framework agent-framework-azure-ai`."
         )
     settings = get_settings()
-    credential = DefaultAzureCredential()
+    auth_mode = "api_key" if settings.azure_openai_key else "entra_id"
     logger.info(
         "diary_agent.chat_client.building",
         endpoint=settings.azure_openai_endpoint,
         deployment=settings.azure_openai_deployment,
         api_version=settings.azure_openai_api_version,
+        auth_mode=auth_mode,
     )
+    if settings.azure_openai_key:
+        return AzureOpenAIChatClient(
+            endpoint=settings.azure_openai_endpoint,
+            deployment_name=settings.azure_openai_deployment,
+            api_version=settings.azure_openai_api_version,
+            api_key=settings.azure_openai_key,
+        )
     return AzureOpenAIChatClient(
         endpoint=settings.azure_openai_endpoint,
         deployment_name=settings.azure_openai_deployment,
         api_version=settings.azure_openai_api_version,
-        credential=credential,
+        credential=DefaultAzureCredential(),
     )
+
 
 
 def default_tool_list() -> list[Any]:

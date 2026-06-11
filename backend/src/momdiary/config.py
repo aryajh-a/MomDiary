@@ -17,10 +17,13 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Azure AI Foundry / Azure OpenAI (auth via DefaultAzureCredential — Principle IV)
+    # Azure AI Foundry / Azure OpenAI.
+    # When `azure_openai_key` is set, the backend authenticates with that API
+    # key; otherwise it falls back to DefaultAzureCredential (Entra ID).
     azure_openai_endpoint: str = Field(default="")
     azure_openai_deployment: str = Field(default="gpt-4.1-mini")
     azure_openai_api_version: str = Field(default="2024-10-21")
+    azure_openai_key: str = Field(default="")
 
     # MomDiary — storage (feature 009: Postgres is the single datastore).
     # The default points at a *local* Postgres so unit tests + dev shells fail
