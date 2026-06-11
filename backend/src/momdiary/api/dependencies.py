@@ -69,6 +69,28 @@ async def get_agent_runner() -> AgentRunner:  # pragma: no cover - replaced in t
     return MAFAgentRunner()
 
 
+def get_research_runner(
+    store: SessionStore = Depends(get_session_store),
+) -> Any:
+    """Build the production ``ResearchRunner`` (feature 011).
+
+    Tests replace this via ``app.dependency_overrides`` to inject a
+    deterministic runner without going through Brave / Azure OpenAI.
+    """
+    from momdiary.agents.research_agent import BraveResearchAdapter
+    from momdiary.agents.research_runner import ResearchRunner
+
+    settings = get_settings()
+    return ResearchRunner(
+        web_search=BraveResearchAdapter(settings),
+        session_store=store,
+        timeout_seconds=settings.momdiary_research_web_search_timeout_seconds,
+        min_sources=settings.momdiary_research_min_sources,
+        max_sources=settings.momdiary_research_max_sources,
+        history_token_budget=settings.momdiary_session_prompt_token_budget,
+    )
+
+
 async def get_dispatcher(
     agent: AgentRunner = Depends(get_agent_runner),
     session: AsyncSession = Depends(get_session),

@@ -75,6 +75,9 @@ def _turn_from_json(d: dict[str, Any]) -> ChatTurn:
         outcome=d.get("outcome"),
         entry_type=d.get("entry_type"),
         entry_id=d.get("entry_id"),
+        # Feature 011 — additive field; older rows omit the key entirely
+        # and deserialize as `None` (contracts/session-store.md §3).
+        sources=d.get("sources"),
     )
 
 

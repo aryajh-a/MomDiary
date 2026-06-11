@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+import { ChatProvider } from "@/features/chat/ChatContext";
 import { SelectedDateProvider } from "@/features/date/useSelectedDate";
 
 export function makeQueryClient(): QueryClient {
@@ -24,7 +25,7 @@ export function renderWithProviders(
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <SelectedDateProvider initialDate={options.selectedDate ?? new Date()}>
-        {children}
+        <ChatProvider>{children}</ChatProvider>
       </SelectedDateProvider>
     </QueryClientProvider>
   );
