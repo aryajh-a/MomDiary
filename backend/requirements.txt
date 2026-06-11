@@ -1,0 +1,27 @@
+# Runtime dependencies for the Azure App Service (Oryx) deploy.
+# Mirrors the [project].dependencies in pyproject.toml. The trailing `.`
+# makes pip run `pip install .` so the src-layout `momdiary` package is
+# installed into site-packages (required for `python -m uvicorn momdiary.main:app`).
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.4
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.29
+alembic>=1.13
+azure-identity>=1.17
+agent-framework-core==1.0.0rc6
+agent-framework-azure-ai==1.0.0rc6
+structlog>=24.1
+clerk-backend-api>=1.5.0,<2.0.0
+svix>=1.30.0,<2.0.0
+PyJWT[crypto]>=2.9
+httpx>=0.27
+tzdata>=2024.1; sys_platform == 'win32'
+
+# Not declared in pyproject but required at runtime: code uses pydantic EmailStr.
+email-validator>=2.0
+
+# Install the local package itself (src/momdiary) into site-packages.
+.
