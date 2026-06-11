@@ -186,7 +186,7 @@ async def configured_app(
 
         if engine_mod._engine is None:
             settings = get_settings()
-            engine_mod._engine = _cae(
+            eng = _cae(
                 settings.momdiary_db_url,
                 future=True,
                 echo=False,
@@ -194,12 +194,21 @@ async def configured_app(
                 max_overflow=settings.momdiary_db_max_overflow,
                 pool_pre_ping=True,
                 pool_recycle=1800,
-                connect_args={
-                    "server_settings": {
-                        "search_path": f'{db_schema},public',
-                    }
-                },
             )
+
+            # Pin search_path to the per-test schema on every new connection.
+            # NOTE: asyncpg's `server_settings={'search_path': ...}` is silently
+            # ignored under this SQLAlchemy+asyncpg combo (the connection keeps
+            # the default `"$user", public`), so the app would write to `public`
+            # and tests would collide. A `connect` event that issues an explicit
+            # `SET search_path` DOES take effect — that's what isolates each test.
+            @event.listens_for(eng.sync_engine, "connect")
+            def _set_search_path(dbapi_conn, _record):  # noqa: ANN001
+                cur = dbapi_conn.cursor()
+                cur.execute(f'SET search_path TO "{db_schema}", public')
+                cur.close()
+
+            engine_mod._engine = eng
             engine_mod._session_factory = _amk(
                 bind=engine_mod._engine,
                 expire_on_commit=False,

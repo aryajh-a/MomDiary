@@ -3,6 +3,7 @@ import { ApiError } from "@/shared/apiClient";
 import type { UserPublic } from "@/shared/types";
 import { useBabies, useCreateBabyMutation } from "../babies/useBabies";
 import { BabyCard } from "./BabyCard";
+import { BabyProfilePage } from "./BabyProfilePage";
 import { CaregiverCard } from "./CaregiverCard";
 
 const NAME_MAX = 80;
@@ -14,24 +15,37 @@ const NAME_MAX = 80;
  */
 export function ProfilePage(props: {
   user: UserPublic;
-  onBack: () => void;
+  onBack?: () => void;
 }): JSX.Element {
   const { user, onBack } = props;
   const babies = useBabies();
   const items = babies.data?.items ?? [];
   const [adding, setAdding] = useState(false);
+  const [selectedBabyId, setSelectedBabyId] = useState<number | null>(null);
+
+  // Open the dedicated per-baby profile. Read the baby straight from the
+  // already-loaded list cache by id so each screen shows only that baby's
+  // own data with no cross-baby bleed-through (FR-007).
+  const selectedBaby =
+    selectedBabyId == null
+      ? null
+      : (items.find((b) => b.id === selectedBabyId) ?? null);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-amber-50 px-4 pt-6 pb-28 text-slate-900">
       <header className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
-          aria-label="Back to home"
-        >
-          ← Back
-        </button>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-amber-50"
+            aria-label="Back to home"
+          >
+            ← Back
+          </button>
+        ) : (
+          <span aria-hidden="true" className="w-[68px]" />
+        )}
         <h1 className="text-2xl font-bold text-slate-900">Profile</h1>
         <span aria-hidden="true" className="w-[68px]" />
       </header>
@@ -72,7 +86,7 @@ export function ProfilePage(props: {
           </p>
         ) : items.length === 0 ? (
           <div className="rounded-2xl bg-white p-4 text-center shadow-sm ring-1 ring-slate-200">
-            <p className="text-sm text-slate-600">No babies yet.</p>
+            <p className="text-sm text-slate-600">No baby added yet</p>
             <button
               type="button"
               onClick={() => setAdding(true)}
@@ -85,7 +99,11 @@ export function ProfilePage(props: {
           <ul className="flex flex-col gap-3">
             {items.map((b) => (
               <li key={b.id}>
-                <BabyCard baby={b} isActive={b.id === user.active_baby_id} />
+                <BabyCard
+                  baby={b}
+                  isActive={b.id === user.active_baby_id}
+                  onOpen={() => setSelectedBabyId(b.id)}
+                />
               </li>
             ))}
           </ul>
@@ -93,6 +111,28 @@ export function ProfilePage(props: {
       </section>
 
       {adding ? <AddBabyDialog onClose={() => setAdding(false)} /> : null}
+
+      {/* Per-baby profile opens as a bottom sheet (mirrors the chat panel),
+          overlaying the list rather than replacing the whole screen. */}
+      {selectedBaby ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Baby profile"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 sm:items-center"
+          onClick={() => setSelectedBabyId(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md origin-bottom animate-[chatPop_180ms_ease-out]"
+          >
+            <BabyProfilePage
+              baby={selectedBaby}
+              onBack={() => setSelectedBabyId(null)}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

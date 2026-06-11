@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from momdiary.auth.dependencies import CurrentUserDep, require_verified_email
-from momdiary.babies.service import BabyService
+from momdiary.babies.service import BabyService, GrowthSummary
 from momdiary.db.engine import get_session
+from momdiary.observability.logging import get_logger
 from momdiary.observability.middleware import current_correlation_id
 from momdiary.schemas.babies import (
     BabyCreate,
@@ -20,6 +21,7 @@ from momdiary.schemas.babies import (
 )
 
 router = APIRouter(tags=["babies"], prefix="/babies")
+logger = get_logger(__name__)
 
 
 def _error(status: int, code: str, message: str) -> HTTPException:
@@ -33,13 +35,20 @@ def _error(status: int, code: str, message: str) -> HTTPException:
     )
 
 
-def _public(baby) -> BabyPublic:  # type: ignore[no-untyped-def]
+def _public(baby, summary: GrowthSummary | None = None) -> BabyPublic:  # type: ignore[no-untyped-def]
+    summary = summary or GrowthSummary()
     return BabyPublic(
         id=baby.id,
         owner_user_id=baby.owner_user_id,
         display_name=baby.display_name,
         date_of_birth=date.fromisoformat(baby.date_of_birth),
         color_tag=baby.color_tag,
+        gender=baby.gender,
+        weight_kg=baby.weight_kg,
+        height_cm=baby.height_cm,
+        last_measured_at=summary.last_measured_at,
+        weight_kg_delta=summary.weight_kg_delta,
+        height_cm_delta=summary.height_cm_delta,
         created_at=baby.created_at,
         updated_at=baby.updated_at,
     )
@@ -50,8 +59,11 @@ async def list_babies(
     auth: CurrentUserDep,
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> BabyListResponse:
-    rows = await BabyService(db).list_for_user(auth.user.id)
-    return BabyListResponse(items=[_public(b) for b in rows])
+    svc = BabyService(db)
+    rows = await svc.list_for_user(auth.user.id)
+    return BabyListResponse(
+        items=[_public(b, await svc.growth_summary(b.id)) for b in rows]
+    )
 
 
 @router.post(
@@ -90,8 +102,18 @@ async def update_baby(
     if baby is None:
         raise _error(404, "not_found", "Baby not found.")
     baby = await svc.update(baby, payload)
+    summary = await svc.growth_summary(baby.id)
     await db.commit()
-    return _public(baby)
+    # FR-018: audit the edit with caregiver + baby + correlation id. Field
+    # *names* only (no values) so no profile/credential material is logged.
+    logger.info(
+        "babies.patch",
+        user_id=auth.user.id,
+        baby_id=baby.id,
+        fields=sorted(payload.model_fields_set),
+        correlation_id=current_correlation_id() or "unknown",
+    )
+    return _public(baby, summary)
 
 
 @router.delete("/{baby_id}", dependencies=[Depends(require_verified_email)])

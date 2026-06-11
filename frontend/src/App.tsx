@@ -4,7 +4,7 @@ import {
   SignedOut,
   useAuth,
 } from "@clerk/clerk-react";
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SignInPage } from "@/features/auth/SignInPage";
 import { SignUpPage } from "@/features/auth/SignUpPage";
@@ -151,6 +151,13 @@ function SignedInShell(): JSX.Element {
   // Feature 009: capture the browser's timezone once the user is loaded.
   useTimezoneSync(session.data?.user);
 
+  // Remember whether the user has had an active baby at any point this session.
+  // This shell stays mounted across the session refetch, so the ref survives
+  // the transition to `active_baby_id == null`. It lets us tell a brand-new
+  // user (never had a baby → focused onboarding) apart from someone who just
+  // removed their last baby (had one → land back on the Profile page).
+  const hadBabyRef = useRef(false);
+
   if (session.isLoading || (session.isPending && !session.data)) {
     return (
       <main className="flex min-h-screen items-center justify-center text-slate-500">
@@ -168,19 +175,28 @@ function SignedInShell(): JSX.Element {
     );
   }
 
-  if (user.active_baby_id == null) return <FirstBabyPrompt />;
+  if (user.active_baby_id != null) {
+    hadBabyRef.current = true;
+    return (
+      <SelectedDateProvider>
+        <ChatProvider>
+          <AppShell
+            displayName={user.display_name}
+            activeBabyId={user.active_baby_id}
+            user={user}
+          />
+        </ChatProvider>
+      </SelectedDateProvider>
+    );
+  }
 
-  return (
-    <SelectedDateProvider>
-      <ChatProvider>
-        <AppShell
-          displayName={user.display_name}
-          activeBabyId={user.active_baby_id}
-          user={user}
-        />
-      </ChatProvider>
-    </SelectedDateProvider>
-  );
+  // No active baby. If they had one this session, they just removed their last
+  // baby — keep them on the Profile page (which shows a "No baby added yet"
+  // empty state and an Add a baby option) rather than the first-run onboarding.
+  if (hadBabyRef.current) {
+    return <ProfilePage user={user} />;
+  }
+  return <FirstBabyPrompt />;
 }
 
 /**
