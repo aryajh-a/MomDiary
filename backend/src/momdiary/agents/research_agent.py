@@ -240,13 +240,20 @@ class BraveResearchAdapter:
             raise ResearchUnavailableError(
                 "AZURE_OPENAI_DEPLOYMENT is not configured."
             )
-        credential = DefaultAzureCredential()
-        self._chat_client = AzureOpenAIChatClient(
-            endpoint=self._settings.azure_openai_endpoint,
-            deployment_name=self._settings.azure_openai_deployment,
-            api_version=self._settings.azure_openai_api_version,
-            credential=credential,
-        )
+        if self._settings.azure_openai_key:
+            self._chat_client = AzureOpenAIChatClient(
+                endpoint=self._settings.azure_openai_endpoint,
+                deployment_name=self._settings.azure_openai_deployment,
+                api_version=self._settings.azure_openai_api_version,
+                api_key=self._settings.azure_openai_key,
+            )
+        else:
+            self._chat_client = AzureOpenAIChatClient(
+                endpoint=self._settings.azure_openai_endpoint,
+                deployment_name=self._settings.azure_openai_deployment,
+                api_version=self._settings.azure_openai_api_version,
+                credential=DefaultAzureCredential(),
+            )
         logger.info(
             "research.chat_client.built",
             endpoint=self._settings.azure_openai_endpoint,
